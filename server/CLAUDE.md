@@ -54,6 +54,8 @@ fastapi dev app/main.py          # auto-reloads on save
 pytest
 ```
 
+CI (`.github/workflows/ci.yml`) runs `pytest` on every push to a PR.
+
 ## Rules
 
 - **Auth:** every endpoint except `/health` takes `user: CurrentUser` and uses
