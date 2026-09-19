@@ -125,8 +125,8 @@ jobs:
   # so adding or renaming a job never means touching the protection rules.
   # `always()` matters: without it this would be skipped when a job fails,
   # and a skipped check counts as passed.
-  ci:
-    name: CI
+  all-checks:
+    name: All checks
     needs: [changes, app, server, android]
     if: always()
     runs-on: ubuntu-latest
