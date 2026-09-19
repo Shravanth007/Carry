@@ -38,6 +38,9 @@ dependencies:
   firebase_auth: ^6.6.1
   google_sign_in: ^7.2.0
   shared_preferences: ^2.5.5
+  # Held at 12: version 13 compiles against SDK 37, which the Android SDK
+  # publishes only as "android-37.0", and Gradle can't match that. Bump it
+  # when a plain platforms;android-37 exists.
   permission_handler: ^12.0.0
   file_selector: ^1.1.0
   http: ^1.6.0

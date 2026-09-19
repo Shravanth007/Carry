@@ -9,7 +9,7 @@ server transcribes it with Groq Whisper, and it serves the notes back. The
 Flutter app lives in `../app` and has its own CLAUDE.md.
 
 **Stack:** Python 3.13, FastAPI, and Firebase Admin (sign-in checks).
-**Today:** `/health` (open) and `/me` (signed in).
+**Today:** `/health` (open) and `/me` (signed in). Both return a schema.
 **Planned:** audio upload, transcription and a notes API.
 
 ## Docs
@@ -54,7 +54,12 @@ fastapi dev app/main.py          # auto-reloads on save
 pytest
 ```
 
-CI (`.github/workflows/ci.yml`) runs `pytest` on every push to a PR.
+CI (`.github/workflows/ci.yml`) runs `pytest` on every push to a PR. A
+server-only PR skips the Flutter jobs entirely, so it finishes in about half
+a minute.
+
+`main` is protected: no direct pushes. Open a PR and merge once the **All
+checks** gate is green.
 
 ## Rules
 

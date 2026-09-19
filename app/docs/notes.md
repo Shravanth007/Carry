@@ -9,9 +9,10 @@ What the home screen shows, how audio gets in, and what moved to settings.
 | Home ("Notes") | The notes, a record button, and an import button. Nothing else |
 | Settings | Account, permissions, MCP (soon), sign out |
 
-Home's app bar has import and settings; the big record button sits at the
-bottom centre, because recording is the main thing people come to do.
-Anything that isn't a note belongs in settings.
+Home's app bar has import and settings. The **Record** pill sits at the
+bottom right, sized and placed for a thumb, because recording is the main
+thing people open the app to do. Anything that isn't a note belongs in
+settings.
 
 **Recording isn't built yet.** The button is real, and so is its microphone
 check: it asks for the microphone, says what to do when that's refused, and
@@ -75,7 +76,7 @@ so the name is taken from the last path segment rather than trusted.
   when the picture does, so the URL is stored alongside it and a change
   re-fetches. If the new one can't be fetched, the old picture stays: a
   slightly old face beats an empty circle. Anything that isn't a small image
-  (an error, an empty body, over 256 KB) is refused. Signing out forgets it.
+  (an error, an empty body, over 64 KB) is refused. Signing out forgets it.
   No caching package: this is one file over the storage we already had.
 - **Permissions:** opens its own screen, so more permissions (notifications,
   later) have a home. The microphone is a switch there:
