@@ -5,21 +5,71 @@ on:
   push:
     branches: [main]
 
+# Nothing here writes to the repo.
+permissions:
+  contents: read
+
 # A new push to the same PR cancels the run still going for the old commit.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Which parts did this PR touch? The jobs below skip the parts that didn't
+  # change. The workflow itself always runs: filtering with `on.paths` would
+  # stop it reporting at all, and a check that never reports blocks the PR.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      server: ${{ steps.filter.outputs.server }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A push to main always runs everything.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch -q --depth=1 origin "${{ github.base_ref }}"
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          echo "Changed files:"; echo "$files"
+
+          # Anything that isn't clearly app-only or server-only runs
+          # everything: a new root-level file must never skip every check.
+          if echo "$files" | grep -qvE '^(app|server)/'; then
+            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "$files" | grep -qE '^app/'    && app=true    || app=false
+          echo "$files" | grep -qE '^server/' && server=true || server=false
+          # The APK build takes minutes and only catches Gradle, plugin and
+          # Firebase wiring, which Dart-only changes can't break.
+          echo "$files" | grep -qE '^app/(android/|pubspec\.(yaml|lock))' \
+            && android=true || android=false
+          echo "app=$app server=$server android=$android"
+          printf 'app=%s\nserver=%s\nandroid=%s\n' "$app" "$server" "$android" \
+            >> "$GITHUB_OUTPUT"
+
   app:
     name: App — analyze and test
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.2
           channel: stable
@@ -32,13 +82,15 @@ jobs:
 
   server:
     name: Server — test
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13'
           cache: pip
@@ -48,17 +100,19 @@ jobs:
 
   android:
     name: App — build debug APK
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.2
           channel: stable
@@ -66,3 +120,25 @@ jobs:
       - run: flutter pub get
       # Catches Gradle, Firebase and plugin problems that analyze can't see.
       - run: flutter build apk --debug
+
+  # The one check branch protection requires. Everything above hangs off it,
+  # so adding or renaming a job never means touching the protection rules.
+  # `always()` matters: without it this would be skipped when a job fails,
+  # and a skipped check counts as passed.
+  all-checks:
+    name: All checks
+    needs: [changes, app, server, android]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the jobs underneath
+        shell: bash
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          # Skipped is fine: that part of the repo wasn't touched.
+          if echo "$results" | grep -qE '"result": *"(failure|cancelled)"'; then
+            echo "::error::A job failed. See the jobs above."
+            exit 1
+          fi
+          echo "All required jobs passed or were skipped."
