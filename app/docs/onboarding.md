@@ -89,8 +89,8 @@ shows to people whose phone is already set up.
 
 Only shows when the phone hasn't granted the microphone. It explains why before
 the system prompt appears, and offers **Allow microphone** and **Not now**.
-Either choice moves on to home. Saying no is not a dead end: home shows a
-reminder banner.
+Either choice moves on to home. Saying no is not a dead end: tapping Record
+asks again, and Settings → Permissions can turn it on any time.
 
 The welcome is marked done only at the very end. An app closed part-way
 through starts the flow again, rather than skipping an explanation the
@@ -135,10 +135,10 @@ isn't permission. The prompt above is what grants it.
 | App is closed mid-flow | Nothing is saved until the end, so the flow starts again next launch |
 | Existing account signs in | Straight home. No greeting, no permission screen |
 | Signing out, then back in with the same account | Straight home |
-| Existing account on a fresh install or new phone | Straight home. The banner asks for the microphone if that phone needs it |
+| Existing account on a fresh install or new phone | Straight home. Tapping Record asks for the microphone, since that phone has never granted it |
 | New second account, phone already allows the microphone | Greeting only. No permission screen, no prompt |
 | New second account, microphone not allowed | Greeting, then the microphone screen |
-| Returning account with the microphone turned off | Straight to home. The banner handles it, rather than onboarding again |
+| Returning account with the microphone turned off | Straight to home. Record asks when tapped, rather than onboarding the person again |
 | User denies the microphone | Onboarding finishes anyway. The record button asks again when tapped, and Settings → Permissions can turn it on |
 | User picks "never ask again" during onboarding | The microphone screen switches to **Open settings** and stays put so the reason can be read. **Continue** moves on |
 | A later attempt after "never ask again" | No prompt can appear, so the app opens phone settings rather than leaving a dead button |

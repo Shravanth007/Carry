@@ -47,7 +47,7 @@ part of the monorepo you touched:
 
 | You changed | CI runs |
 |---|---|
-| Dart under `app/` | format, analyze, test (~1 min) |
+| Any file under `app/` | format, analyze, test (~1 min) |
 | `app/android/` or `app/pubspec.*` | the above plus a debug APK build (~5 min) |
 | `server/` only | pytest, and the Flutter jobs skip |
 | anything else | everything |
