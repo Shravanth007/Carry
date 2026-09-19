@@ -6,21 +6,21 @@ import '../theme.dart';
 import '../widgets/scrollable_column.dart';
 
 @Preview(name: 'Microphone', size: Size(412, 915), wrapper: previewApp)
-Widget permissionPreview() => PermissionScreen(onDone: () {});
+Widget microphonePreview() => MicrophoneScreen(onDone: () {});
 
 /// Asks for the microphone with the reason, instead of prompting cold on the
 /// record button. Only shown when the phone hasn't granted it already.
-class PermissionScreen extends StatefulWidget {
-  const PermissionScreen({super.key, required this.onDone});
+class MicrophoneScreen extends StatefulWidget {
+  const MicrophoneScreen({super.key, required this.onDone});
 
   /// Called when the user is finished here, whatever they chose.
   final VoidCallback onDone;
 
   @override
-  State<PermissionScreen> createState() => _PermissionScreenState();
+  State<MicrophoneScreen> createState() => _MicrophoneScreenState();
 }
 
-class _PermissionScreenState extends State<PermissionScreen> {
+class _MicrophoneScreenState extends State<MicrophoneScreen> {
   bool _busy = false;
   bool _blocked = false;
 

@@ -10,7 +10,7 @@ import 'widgets.dart';
 Widget settingsPreview() =>
     const SettingsScreen(name: 'Ada Lovelace', email: 'ada@gmail.com');
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.name,
@@ -26,6 +26,30 @@ class SettingsScreen extends StatelessWidget {
   final String? photoUrl;
 
   @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _signingOut = false;
+
+  Future<void> _signOut() async {
+    setState(() => _signingOut = true);
+    try {
+      await signOutAndForget();
+    } catch (e) {
+      debugPrint('Sign-out failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't sign out. Try again.")),
+        );
+      }
+    }
+    // On success this screen normally goes away with the signed-in app. If
+    // it's somehow still here, put the row back rather than spinning forever.
+    if (mounted) setState(() => _signingOut = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Scaffold(
@@ -39,14 +63,18 @@ class SettingsScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Avatar(photoUrl: photoUrl, name: name, email: email),
+                  Avatar(
+                    photoUrl: widget.photoUrl,
+                    name: widget.name,
+                    email: widget.email,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          name ?? 'Signed in',
+                          widget.name ?? 'Signed in',
                           style: text.titleMedium?.copyWith(
                             color: CarryColors.ink,
                             fontWeight: FontWeight.w600,
@@ -55,7 +83,7 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          email,
+                          widget.email,
                           style: text.bodyMedium?.copyWith(
                             color: CarryColors.muted,
                           ),
@@ -102,7 +130,17 @@ class SettingsScreen extends StatelessWidget {
             child: SettingsRow(
               title: 'Sign out',
               titleColor: CarryColors.error,
-              onTap: signOutAndForget,
+              // Signing out of Google can take a moment: show that it started.
+              trailing: _signingOut
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        semanticsLabel: 'Signing out',
+                      ),
+                    )
+                  : null,
+              onTap: _signingOut ? null : _signOut,
             ),
           ),
         ],

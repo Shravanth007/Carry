@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "554877300113",
+    "project_id": "carry-92aeb",
+    "storage_bucket": "carry-92aeb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:554877300113:android:bb65caf51c95cfb61c3e30",
+        "android_client_info": {
+          "package_name": "com.carry.carry"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "554877300113-oupakq3rls6ojc0p16n36s4bm4vt864g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.carry.carry",
+            "certificate_hash": "fc18650ce3ff6efe2dbfc4e52e07084a8110f3c1"
+          }
+        },
+        {
+          "client_id": "554877300113-a7l2s5k1h5qe6m15cq0hutadgja9e9kp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVlP6hVwsQZkBZkFPvQJ8ZjNoM9EUrx4w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "554877300113-a7l2s5k1h5qe6m15cq0hutadgja9e9kp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

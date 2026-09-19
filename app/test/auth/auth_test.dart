@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:carry/auth/auth.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,6 +69,21 @@ void main() {
         ),
       );
     });
+  });
+
+  test('signOut leaves the app signed out before Google finishes', () async {
+    // Google's sign-out can take a moment on Android; Firebase's is local.
+    // Doing Firebase first is what makes the app respond straight away.
+    await Auth.signInWithGoogle();
+    final googleBusy = Completer<void>();
+    testAuth.google.onSignOut = () => googleBusy.future;
+
+    final signingOut = Auth.signOut();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(Auth.currentUser, isNull, reason: 'signed out already');
+    googleBusy.complete();
+    await signingOut;
   });
 
   test('signOut signs out of Firebase and Google', () async {

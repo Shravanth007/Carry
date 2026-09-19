@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../permissions/permissions.dart';
-import 'permission_screen.dart';
+import 'microphone_screen.dart';
 import 'welcome_screen.dart';
 
 /// Remembers whether an account has been welcomed on this device.
@@ -105,7 +105,7 @@ class _OnboardingGateState extends State<OnboardingGate> {
       name: widget.user.displayName,
       onContinue: _afterWelcome,
     ),
-    _Step.microphone => PermissionScreen(onDone: _finish),
+    _Step.microphone => MicrophoneScreen(onDone: _finish),
     _Step.home => widget.home,
   };
 }

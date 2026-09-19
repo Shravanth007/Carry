@@ -46,13 +46,16 @@ There are two different tokens in play:
 
 All auth code lives in the auth feature. The only thing the rest of the app
 touches is the `Auth` class (plus the `AuthGate` widget). Screens never call
-Firebase or Google directly.
+Firebase or Google directly, and never read Firebase error codes: `Auth` is
+the single route in and out. Outside `auth/`, `firebase_auth` is imported only
+for the `User` type.
 
 | Call | What it does |
 |---|---|
 | `Auth.init()` | Sets up Google Sign-In. Runs once in `main()` after `Firebase.initializeApp`. |
 | `Auth.signInWithGoogle()` | Opens the account picker and signs in to Firebase with Google's token. Returns `null` if the user closes the picker. Throws on real failures. |
-| `Auth.signOut()` | Signs out of Firebase **and** Google, so the picker shows again next time. |
+| `Auth.signOut()` | Firebase first (local, instant, flips the app to signed out), then Google (slower, makes the picker show again). Don't reorder: waiting on Google first is what made sign-out feel laggy. |
+| `Auth.messageFor(error)` | The sentence to show when a sign-in fails. Screens never read Firebase error codes themselves. |
 | `Auth.currentUser` | The signed-in Firebase user, or `null`. |
 | `Auth.userChanges` | A stream that fires on sign-in and sign-out. |
 | `Auth.idToken({forceRefresh})` | The Firebase ID token for server calls, or `null` when signed out. |

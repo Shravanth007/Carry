@@ -45,9 +45,24 @@ abstract final class Auth {
     }
   }
 
-  /// Signs out of Google too, so the account picker shows again next time.
-  static Future<void> signOut() =>
-      Future.wait([_firebase.signOut(), _google.signOut()]);
+  /// Firebase first, so the app flips to signed out immediately: that call is
+  /// local and instant, while Google's can take a moment. Google follows, so
+  /// the account picker shows again next time.
+  static Future<void> signOut() async {
+    await _firebase.signOut();
+    await _google.signOut();
+  }
+
+  /// What to show the user when a sign-in fails. Kept here so every screen
+  /// says the same thing.
+  static String messageFor(Object error) {
+    final offline =
+        error is FirebaseAuthException &&
+        error.code == 'network-request-failed';
+    return offline
+        ? 'No internet connection. Connect and try again.'
+        : "Couldn't sign in with Google. Try again.";
+  }
 }
 
 /// Shows the sign-in screen when signed out, [signedIn] otherwise.
