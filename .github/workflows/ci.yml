@@ -11,8 +11,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Which half of the monorepo did this PR touch? The jobs below skip the
+  # half that didn't change. The workflow itself always runs: filtering with
+  # `on.paths` would stop it reporting at all, and a required check that
+  # never reports blocks the PR forever. A skipped job reports as passed.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      server: ${{ steps.filter.outputs.server }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A push to main, or anything touching CI itself, runs everything.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "server=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch -q --depth=1 origin "${{ github.base_ref }}"
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          echo "Changed files:"; echo "$files"
+          if echo "$files" | grep -qE '^\.github/'; then
+            app=true; server=true
+          else
+            echo "$files" | grep -qE '^app/'    && app=true    || app=false
+            echo "$files" | grep -qE '^server/' && server=true || server=false
+          fi
+          echo "app=$app server=$server"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+
   app:
     name: App — analyze and test
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,6 +71,8 @@ jobs:
 
   server:
     name: Server — test
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,6 +89,8 @@ jobs:
 
   android:
     name: App — build debug APK
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
