@@ -15,16 +15,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Which half of the monorepo did this PR touch? The jobs below skip the
-  # half that didn't change. The workflow itself always runs: filtering with
-  # `on.paths` would stop it reporting at all, and a required check that
-  # never reports blocks the PR forever. A skipped job reports as passed.
+  # Which parts did this PR touch? The jobs below skip the parts that didn't
+  # change. The workflow itself always runs: filtering with `on.paths` would
+  # stop it reporting at all, and a check that never reports blocks the PR.
   changes:
     name: What changed
     runs-on: ubuntu-latest
     outputs:
       app: ${{ steps.filter.outputs.app }}
       server: ${{ steps.filter.outputs.server }}
+      android: ${{ steps.filter.outputs.android }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -35,24 +35,29 @@ jobs:
           set -euo pipefail
           # A push to main always runs everything.
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "app=true" >> "$GITHUB_OUTPUT"
-            echo "server=true" >> "$GITHUB_OUTPUT"
+            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git fetch -q --depth=1 origin "${{ github.base_ref }}"
           files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           echo "Changed files:"; echo "$files"
-          # Anything that isn't clearly app-only or server-only runs both:
-          # a new root-level file must never skip every check.
+
+          # Anything that isn't clearly app-only or server-only runs
+          # everything: a new root-level file must never skip every check.
           if echo "$files" | grep -qvE '^(app|server)/'; then
-            app=true; server=true
-          else
-            echo "$files" | grep -qE '^app/'    && app=true    || app=false
-            echo "$files" | grep -qE '^server/' && server=true || server=false
+            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "app=$app server=$server"
-          echo "app=$app" >> "$GITHUB_OUTPUT"
-          echo "server=$server" >> "$GITHUB_OUTPUT"
+
+          echo "$files" | grep -qE '^app/'    && app=true    || app=false
+          echo "$files" | grep -qE '^server/' && server=true || server=false
+          # The APK build takes minutes and only catches Gradle, plugin and
+          # Firebase wiring, which Dart-only changes can't break.
+          echo "$files" | grep -qE '^app/(android/|pubspec\.(yaml|lock))' \
+            && android=true || android=false
+          echo "app=$app server=$server android=$android"
+          printf 'app=%s\nserver=%s\nandroid=%s\n' "$app" "$server" "$android" \
+            >> "$GITHUB_OUTPUT"
 
   app:
     name: App — analyze and test
@@ -96,7 +101,7 @@ jobs:
   android:
     name: App — build debug APK
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -115,3 +120,25 @@ jobs:
       - run: flutter pub get
       # Catches Gradle, Firebase and plugin problems that analyze can't see.
       - run: flutter build apk --debug
+
+  # The one check branch protection requires. Everything above hangs off it,
+  # so adding or renaming a job never means touching the protection rules.
+  # `always()` matters: without it this would be skipped when a job fails,
+  # and a skipped check counts as passed.
+  ci:
+    name: CI
+    needs: [changes, app, server, android]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the jobs underneath
+        shell: bash
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          # Skipped is fine: that part of the repo wasn't touched.
+          if echo "$results" | grep -qE '"result": *"(failure|cancelled)"'; then
+            echo "::error::A job failed. See the jobs above."
+            exit 1
+          fi
+          echo "All required jobs passed or were skipped."
