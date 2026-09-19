@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -66,10 +68,39 @@ abstract final class Auth {
 }
 
 /// Shows the sign-in screen when signed out, [signedIn] otherwise.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key, required this.signedIn});
 
   final Widget Function(User user) signedIn;
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  StreamSubscription<User?>? _watch;
+
+  @override
+  void initState() {
+    super.initState();
+    // Screens pushed above the gate (settings, permissions) belong to the
+    // signed-in app. Swapping what the gate shows doesn't remove them, so
+    // close them here. Covers sign-out from anywhere, and a session that
+    // ends on its own.
+    _watch = Auth.userChanges.listen((user) {
+      if (user != null || !mounted) return;
+      final navigator = Navigator.maybeOf(context);
+      if (navigator != null && navigator.canPop()) {
+        navigator.popUntil((route) => route.isFirst);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _watch?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +111,7 @@ class AuthGate extends StatelessWidget {
           return const Scaffold();
         }
         final user = snapshot.data;
-        return user == null ? const SignInScreen() : signedIn(user);
+        return user == null ? const SignInScreen() : widget.signedIn(user);
       },
     );
   }

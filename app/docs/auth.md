@@ -62,7 +62,12 @@ for the `User` type.
 
 `AuthGate` sits at the root of the app. It listens to `Auth.userChanges`,
 shows the sign-in screen when nobody is signed in, and shows the screen
-`main.dart` gives it when someone is. Today that's the welcome screen for a
+`main.dart` gives it when someone is.
+
+It also **closes anything pushed above it** when the user goes away. Settings
+and permissions are pushed routes, and swapping what the gate shows does not
+remove them, so without this you sign out and keep staring at Settings. This
+covers sign-out from anywhere and a session that ends on its own. Today that's the welcome screen for a
 new user and home for everyone else — see [onboarding.md](onboarding.md).
 
 Firebase Auth is also where the user record lives (ID, email, name, photo).
