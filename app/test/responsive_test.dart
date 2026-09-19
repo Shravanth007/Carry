@@ -1,7 +1,7 @@
 import 'package:carry/auth/sign_in_screen.dart';
 import 'package:carry/home/home_screen.dart';
 import 'package:carry/notes/notes.dart';
-import 'package:carry/onboarding/permission_screen.dart';
+import 'package:carry/onboarding/microphone_screen.dart';
 import 'package:carry/onboarding/welcome_screen.dart';
 import 'package:carry/settings/permissions_screen.dart';
 import 'package:carry/settings/settings_screen.dart';
@@ -29,7 +29,7 @@ void main() {
   final screens = <String, Widget>{
     'sign in': const SignInScreen(),
     'welcome': WelcomeScreen(name: 'Ada Lovelace', onContinue: () {}),
-    'microphone': PermissionScreen(onDone: () {}),
+    'microphone': MicrophoneScreen(onDone: () {}),
     'home': const HomeScreen(name: 'Ada Lovelace', email: testEmail),
     'settings': const SettingsScreen(name: 'Ada Lovelace', email: testEmail),
     'permissions': const PermissionsScreen(),

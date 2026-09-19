@@ -46,20 +46,28 @@ There are two different tokens in play:
 
 All auth code lives in the auth feature. The only thing the rest of the app
 touches is the `Auth` class (plus the `AuthGate` widget). Screens never call
-Firebase or Google directly.
+Firebase or Google directly, and never read Firebase error codes: `Auth` is
+the single route in and out. Outside `auth/`, `firebase_auth` is imported only
+for the `User` type.
 
 | Call | What it does |
 |---|---|
 | `Auth.init()` | Sets up Google Sign-In. Runs once in `main()` after `Firebase.initializeApp`. |
 | `Auth.signInWithGoogle()` | Opens the account picker and signs in to Firebase with Google's token. Returns `null` if the user closes the picker. Throws on real failures. |
-| `Auth.signOut()` | Signs out of Firebase **and** Google, so the picker shows again next time. |
+| `Auth.signOut()` | Firebase first (local, instant, flips the app to signed out), then Google (slower, makes the picker show again). Don't reorder: waiting on Google first is what made sign-out feel laggy. |
+| `Auth.messageFor(error)` | The sentence to show when a sign-in fails. Screens never read Firebase error codes themselves. |
 | `Auth.currentUser` | The signed-in Firebase user, or `null`. |
 | `Auth.userChanges` | A stream that fires on sign-in and sign-out. |
 | `Auth.idToken({forceRefresh})` | The Firebase ID token for server calls, or `null` when signed out. |
 
 `AuthGate` sits at the root of the app. It listens to `Auth.userChanges`,
 shows the sign-in screen when nobody is signed in, and shows the screen
-`main.dart` gives it when someone is. Today that's the welcome screen for a
+`main.dart` gives it when someone is.
+
+It also **closes anything pushed above it** when the user goes away. Settings
+and permissions are pushed routes, and swapping what the gate shows does not
+remove them, so without this you sign out and keep staring at Settings. This
+covers sign-out from anywhere and a session that ends on its own. Today that's the welcome screen for a
 new user and home for everyone else — see [onboarding.md](onboarding.md).
 
 Firebase Auth is also where the user record lives (ID, email, name, photo).

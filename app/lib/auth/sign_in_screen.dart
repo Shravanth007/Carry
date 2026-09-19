@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
@@ -30,14 +29,9 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       // On success the auth stream in main.dart swaps this screen out.
       await Auth.signInWithGoogle();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Google sign-in failed: $e');
-      _error = e.code == 'network-request-failed'
-          ? 'No internet connection. Connect and try again.'
-          : "Couldn't sign in with Google. Try again.";
     } catch (e) {
       debugPrint('Google sign-in failed: $e');
-      _error = "Couldn't sign in with Google. Try again.";
+      _error = Auth.messageFor(e);
     }
     if (mounted) setState(() => _busy = false);
   }

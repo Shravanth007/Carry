@@ -1,4 +1,4 @@
-import 'package:carry/onboarding/permission_screen.dart';
+import 'package:carry/onboarding/microphone_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 
@@ -15,7 +15,7 @@ void main() {
   });
 
   Future<void> pumpPermission(WidgetTester tester) =>
-      pumpScreen(tester, PermissionScreen(onDone: () => done++));
+      pumpScreen(tester, MicrophoneScreen(onDone: () => done++));
 
   testWidgets('explains why before prompting', (tester) async {
     await pumpPermission(tester);

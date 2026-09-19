@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -45,16 +47,60 @@ abstract final class Auth {
     }
   }
 
-  /// Signs out of Google too, so the account picker shows again next time.
-  static Future<void> signOut() =>
-      Future.wait([_firebase.signOut(), _google.signOut()]);
+  /// Firebase first, so the app flips to signed out immediately: that call is
+  /// local and instant, while Google's can take a moment. Google follows, so
+  /// the account picker shows again next time.
+  static Future<void> signOut() async {
+    await _firebase.signOut();
+    await _google.signOut();
+  }
+
+  /// What to show the user when a sign-in fails. Kept here so every screen
+  /// says the same thing.
+  static String messageFor(Object error) {
+    final offline =
+        error is FirebaseAuthException &&
+        error.code == 'network-request-failed';
+    return offline
+        ? 'No internet connection. Connect and try again.'
+        : "Couldn't sign in with Google. Try again.";
+  }
 }
 
 /// Shows the sign-in screen when signed out, [signedIn] otherwise.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key, required this.signedIn});
 
   final Widget Function(User user) signedIn;
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  StreamSubscription<User?>? _watch;
+
+  @override
+  void initState() {
+    super.initState();
+    // Screens pushed above the gate (settings, permissions) belong to the
+    // signed-in app. Swapping what the gate shows doesn't remove them, so
+    // close them here. Covers sign-out from anywhere, and a session that
+    // ends on its own.
+    _watch = Auth.userChanges.listen((user) {
+      if (user != null || !mounted) return;
+      final navigator = Navigator.maybeOf(context);
+      if (navigator != null && navigator.canPop()) {
+        navigator.popUntil((route) => route.isFirst);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _watch?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +111,7 @@ class AuthGate extends StatelessWidget {
           return const Scaffold();
         }
         final user = snapshot.data;
-        return user == null ? const SignInScreen() : signedIn(user);
+        return user == null ? const SignInScreen() : widget.signedIn(user);
       },
     );
   }

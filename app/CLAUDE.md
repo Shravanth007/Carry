@@ -42,6 +42,11 @@ dart format lib test
 No hooks run automatically. Format, analyze and test yourself before calling
 work done.
 
+CI (`.github/workflows/ci.yml`) runs the same three on every push to a PR:
+`dart format --set-exit-if-changed`, `flutter analyze`, `flutter test`, plus a
+debug APK build. A formatting slip fails the build, so run `dart format`
+before pushing.
+
 ## Rules
 
 ### Architecture

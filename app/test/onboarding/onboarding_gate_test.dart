@@ -1,5 +1,5 @@
 import 'package:carry/onboarding/onboarding.dart';
-import 'package:carry/onboarding/permission_screen.dart';
+import 'package:carry/onboarding/microphone_screen.dart';
 import 'package:carry/onboarding/welcome_screen.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
@@ -22,7 +22,7 @@ void main() {
   }
 
   final welcome = find.byType(WelcomeScreen);
-  final microphone = find.byType(PermissionScreen);
+  final microphone = find.byType(MicrophoneScreen);
   final home = find.text('Home');
 
   group('new account', () {

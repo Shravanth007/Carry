@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:carry/auth/auth.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/settings/permissions_screen.dart';
@@ -100,5 +102,39 @@ void main() {
 
     expect(Auth.currentUser, isNull);
     expect(testAuth.google.signOutCalls, 1);
+  });
+
+  testWidgets('shows that signing out started, and blocks a second tap', (
+    tester,
+  ) async {
+    final googleBusy = Completer<void>();
+    testAuth.google.onSignOut = () => googleBusy.future;
+    await pumpSettings(tester);
+
+    await tester.tap(find.text('Sign out'));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.tap(find.text('Sign out'), warnIfMissed: false);
+    await tester.pump();
+    expect(
+      testAuth.google.signOutCalls,
+      1,
+      reason: 'the second tap is ignored',
+    );
+
+    googleBusy.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('says so when signing out fails', (tester) async {
+    failNextSignOut(testAuth);
+    await pumpSettings(tester);
+
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Couldn't sign out. Try again."), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 }
