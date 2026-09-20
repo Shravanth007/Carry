@@ -3,8 +3,7 @@ import 'package:flutter/widget_previews.dart';
 
 import '../notes/audio_import.dart';
 import '../notes/notes.dart';
-import '../permissions/permissions.dart';
-import '../recording/recorder.dart';
+import '../recording/recording.dart';
 import '../recording/recording_bar.dart';
 import '../settings/settings_screen.dart';
 import '../theme.dart';
@@ -57,24 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _record() async {
-    var mic = await Permissions.micStatus();
-    if (mic != MicPermission.granted) mic = await Permissions.requestMic();
+    // Permission, hardware and wording all live in Recording.
+    final problem = await Recording.begin();
     if (!mounted) return;
-    if (mic != MicPermission.granted) {
-      _say(
-        "Carry can't record without the microphone. "
-        'Turn it on in Settings → Permissions.',
-      );
+    if (problem != null) {
+      _say(problem);
       return;
     }
-    try {
-      await Recorder.start();
-    } catch (e) {
-      debugPrint('Could not start recording: $e');
-      if (mounted) _say("Carry couldn't start recording. Try again.");
-      return;
-    }
-    if (mounted) setState(() => _recording = true);
+    setState(() => _recording = true);
   }
 
   /// The bar is done: it either saved a note, or has a sentence explaining

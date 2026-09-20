@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../notes/notes.dart';
 import '../theme.dart';
-import 'recorder.dart';
+import 'recording.dart';
 
 /// The black bar that sits at the bottom of the notes list while recording.
 ///
 /// It stays on the notes screen on purpose: you can see your notes while a
 /// recording runs, and the bar is the one place that says it's running.
+/// It only draws and reports taps: [Recording] does the work.
 class RecordingBar extends StatefulWidget {
   const RecordingBar({
     super.key,
@@ -31,6 +31,7 @@ class RecordingBar extends StatefulWidget {
 
 class _RecordingBarState extends State<RecordingBar> {
   Timer? _ticker;
+  late final AppLifecycleListener _lifecycle;
   Duration _elapsed = Duration.zero;
   double _level = 0;
   bool _finishing = false;
@@ -45,13 +46,14 @@ class _RecordingBarState extends State<RecordingBar> {
       _level = 0.55;
       return;
     }
+    // Without a foreground service the phone can cut the microphone once
+    // Carry is out of sight, so keep what there is rather than lose it.
+    _lifecycle = AppLifecycleListener(onPause: _saveBeforeTheAppGoes);
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) async {
-      final level = Recorder.isPaused
-          ? 0.0
-          : await Recorder.level().catchError((_) => 0.0);
+      final level = await Recording.level();
       if (!mounted) return;
       setState(() {
-        _elapsed = Recorder.elapsed;
+        _elapsed = Recording.elapsed;
         _level = level;
       });
     });
@@ -60,34 +62,43 @@ class _RecordingBarState extends State<RecordingBar> {
   @override
   void dispose() {
     _ticker?.cancel();
+    if (!_isPreview) {
+      _lifecycle.dispose();
+      // The bar is going away with nothing to replace it — the account
+      // signed out, or the screen was torn down. A recording with no
+      // controls must not keep the microphone or leave a file behind.
+      if (Recording.inProgress) unawaited(Recording.abandon());
+    }
     super.dispose();
   }
 
+  Future<void> _saveBeforeTheAppGoes() async {
+    if (Recording.inProgress && !_finishing) await _save();
+  }
+
   Future<void> _pauseOrResume() async {
-    if (Recorder.isPaused) {
-      await Recorder.resume();
-    } else {
-      await Recorder.pause();
-    }
-    if (mounted) setState(() {});
+    final problem = await Recording.pauseOrResume();
+    if (!mounted) return;
+    setState(() {});
+    if (problem != null) _say(problem);
   }
 
   Future<void> _save() async {
     if (_finishing) return; // a second tap must not save twice
     setState(() => _finishing = true);
     _ticker?.cancel();
-    final finished = await Recorder.stop();
+
+    final result = await Recording.finish();
     if (!mounted) return;
-    if (finished == null) {
-      widget.onFinished('Too short to save. Hold on a little longer.');
+    if (result.stillRecording) {
+      // The phone wouldn't stop: put the controls back rather than leaving
+      // a bar nobody can use.
+      setState(() => _finishing = false);
+      _startTicking();
+      _say(result.message!);
       return;
     }
-    Notes.addRecorded(
-      path: finished.path,
-      duration: finished.duration,
-      bytes: finished.bytes,
-    );
-    widget.onFinished(null);
+    widget.onFinished(result.message);
   }
 
   Future<void> _discard() async {
@@ -112,9 +123,25 @@ class _RecordingBarState extends State<RecordingBar> {
     );
     if (sure != true || !mounted) return;
     _ticker?.cancel();
-    await Recorder.discard();
+    await Recording.throwAway();
     if (mounted) widget.onFinished(null);
   }
+
+  void _startTicking() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) async {
+      final level = await Recording.level();
+      if (!mounted) return;
+      setState(() {
+        _elapsed = Recording.elapsed;
+        _level = level;
+      });
+    });
+  }
+
+  void _say(String message) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
 
   /// mm:ss, and h:mm:ss once it runs past an hour.
   static String clock(Duration d) {
@@ -127,7 +154,7 @@ class _RecordingBarState extends State<RecordingBar> {
 
   @override
   Widget build(BuildContext context) {
-    final paused = _isPreview ? false : Recorder.isPaused;
+    final paused = _isPreview ? false : Recording.isPaused;
     return Semantics(
       liveRegion: true,
       label: paused

@@ -121,6 +121,92 @@ void main() {
     expect(finishedTimes, 1);
   });
 
+  group('when the phone misbehaves', () {
+    testWidgets('a failed stop leaves the controls usable', (tester) async {
+      await showBar(tester, seconds: 4);
+      microphone.failOnStop = Exception('phone will not let go');
+
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.text("Carry couldn't stop the recording. Try again."),
+        findsOneWidget,
+      );
+      expect(finishedTimes, 0, reason: 'the bar stays: nothing is finished');
+      expect(Recorder.isRecording, isTrue, reason: 'still recording');
+      final save = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(save.onPressed, isNotNull, reason: 'and Save can be tried again');
+    });
+
+    testWidgets('a failed stop can be retried', (tester) async {
+      await showBar(tester, seconds: 4);
+      microphone.failOnStop = Exception('phone will not let go');
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      microphone.failOnStop = null;
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(Notes.all.value, hasLength(1));
+      expect(finishedTimes, 1);
+    });
+
+    testWidgets('a failed pause says the recording is still running', (
+      tester,
+    ) async {
+      await showBar(tester, seconds: 4);
+      microphone.failOnPause = Exception('cannot pause');
+
+      await tester.tap(find.byTooltip('Pause recording'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.textContaining('still running'), findsOneWidget);
+      expect(Recorder.isPaused, isFalse, reason: 'state matches the phone');
+      expect(find.byTooltip('Pause recording'), findsOneWidget);
+    });
+  });
+
+  group('when the bar goes away', () {
+    testWidgets('leaving the app saves rather than losing it', (tester) async {
+      await showBar(tester, seconds: 4);
+
+      // Android can take the microphone back once Carry is out of sight.
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(Notes.all.value, hasLength(1), reason: 'saved, not lost');
+      expect(Recorder.isRecording, isFalse);
+    });
+
+    testWidgets('being torn down stops the microphone and drops the file', (
+      tester,
+    ) async {
+      // What signing out does: the screen holding the bar disappears.
+      await showBar(tester, seconds: 4);
+      final path = microphone.startedPath!;
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+
+      expect(
+        Recorder.isRecording,
+        isFalse,
+        reason: 'no recording without controls',
+      );
+      expect(microphone.cancels, 1);
+      expect(File(path).existsSync(), isFalse);
+      expect(Notes.all.value, isEmpty);
+    });
+  });
+
   group('throwing it away', () {
     testWidgets('asks first, and says how much would be lost', (tester) async {
       await showBar(tester, seconds: 7);

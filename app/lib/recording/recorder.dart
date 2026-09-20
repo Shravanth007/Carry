@@ -122,10 +122,11 @@ abstract final class Recorder {
   /// Keeps the file open and stops adding to it. The clock stops with it.
   static Future<void> pause() async {
     if (_state != RecorderState.recording) return;
+    // The phone first: if it refuses, our state must not claim it paused.
+    await _current.pause();
     _before = elapsed;
     _runningSince = null;
     _state = RecorderState.paused;
-    await _current.pause();
   }
 
   static Future<void> resume() async {
@@ -162,9 +163,13 @@ abstract final class Recorder {
   static Future<void> discard() async {
     if (!isRecording) return;
     final path = _path;
-    _reset();
-    await _current.cancel();
-    if (path != null) _delete(path);
+    try {
+      await _current.cancel();
+    } finally {
+      // Whatever the phone does, stop claiming a recording and drop the file.
+      _reset();
+      if (path != null) _delete(path);
+    }
   }
 
   static void _reset() {

@@ -40,9 +40,21 @@ the background). Carry saves what it has rather than losing it. Recording
 while the app isn't in front needs a foreground service and
 `FOREGROUND_SERVICE_MICROPHONE`, which isn't built.
 
-**The hardware sits behind `RecorderBackend`**, so tests run a stand-in that
-writes real files, and `Recorder` itself is the only place that talks to the
-microphone.
+**One route in and out.** Everything recording-related goes through
+`Recording`: the microphone permission, starting, pausing, saving, throwing
+away, and the wording shown when any of it fails. Screens only draw and report
+taps; they never touch `Recorder` or `Permissions` themselves. Underneath,
+`Recorder` owns the state and the file, and the hardware sits behind
+`RecorderBackend` so tests run a stand-in that writes real files.
+
+**When things go wrong:**
+- The phone refuses to stop → the bar keeps its controls and says so, so it
+  can be tried again. It never leaves a bar nobody can use.
+- Pause fails → the recording carries on and the screen says that, rather
+  than showing a pause that didn't happen.
+- The bar is torn down with nowhere to go (signing out, the screen being
+  replaced) → the microphone is stopped and the file dropped. A recording
+  with no controls is never left running.
 
 ## Notes
 

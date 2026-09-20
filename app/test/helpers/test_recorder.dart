@@ -16,6 +16,12 @@ class TestRecorder implements RecorderBackend {
   /// Set to make starting fail, as a microphone held by another app does.
   Object? failOnStart;
 
+  /// Set to make stopping fail, as a phone that won't let go does.
+  Object? failOnStop;
+
+  /// Set to make pausing fail.
+  Object? failOnPause;
+
   /// Bytes written when the recording stops. Zero mimics a file the phone
   /// never actually wrote.
   int bytes = 4096;
@@ -36,13 +42,19 @@ class TestRecorder implements RecorderBackend {
   int resumes = 0;
 
   @override
-  Future<void> pause() async => pauses++;
+  Future<void> pause() async {
+    final failure = failOnPause;
+    if (failure != null) throw failure;
+    pauses++;
+  }
 
   @override
   Future<void> resume() async => resumes++;
 
   @override
   Future<String?> stop() async {
+    final failure = failOnStop;
+    if (failure != null) throw failure;
     stops++;
     final path = startedPath;
     if (path != null && bytes > 0) {
