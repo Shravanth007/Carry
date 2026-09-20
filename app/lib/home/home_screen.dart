@@ -48,6 +48,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// True while the bar at the bottom is running a recording.
   bool _recording = false;
 
+  /// True between the tap and the microphone actually starting.
+  bool _starting = false;
+
   Future<void> _import() async {
     final result = await importAudio();
     final error = result.error;
@@ -56,9 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _record() async {
+    if (_starting) return; // one tap is enough
+    setState(() => _starting = true);
     // Permission, hardware and wording all live in Recording.
     final problem = await Recording.begin();
     if (!mounted) return;
+    setState(() => _starting = false);
     if (problem != null) {
       _say(problem);
       return;

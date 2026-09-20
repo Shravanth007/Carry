@@ -26,6 +26,11 @@ class TestRecorder implements RecorderBackend {
   /// Holds a pause open, so a test can land it after the recording ended.
   Completer<void>? pauseGate;
 
+  /// Holds starting open, so a test can tap twice before the first finishes.
+  Completer<void>? startGate;
+
+  int starts = 0;
+
   /// Bytes written when the recording stops. Zero mimics a file the phone
   /// never actually wrote.
   int bytes = 4096;
@@ -38,6 +43,8 @@ class TestRecorder implements RecorderBackend {
   Future<void> start(String path) async {
     final failure = failOnStart;
     if (failure != null) throw failure;
+    await startGate?.future;
+    starts++;
     startedPath = path;
     File(path).writeAsBytesSync(<int>[]);
   }

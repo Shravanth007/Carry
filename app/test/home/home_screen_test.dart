@@ -25,6 +25,9 @@ void main() {
     setUpTestPrefs();
     setUpTestAvatarDownloads();
     picker = setUpTestFilePicker();
+    // Every test in here, so a tap on Record can never reach the real
+    // microphone and leave the recorder running into the next test.
+    setUpTestRecorder();
     Notes.clear();
   });
 
@@ -156,7 +159,6 @@ void main() {
     testWidgets('starts recording and shows the bar, without leaving', (
       tester,
     ) async {
-      setUpTestRecorder();
       Recorder.clockForTesting = () => tester.binding.clock.now();
       await pumpHome(tester);
 
@@ -176,7 +178,6 @@ void main() {
     });
 
     testWidgets('a saved recording lands on the list', (tester) async {
-      setUpTestRecorder();
       Recorder.clockForTesting = () => tester.binding.clock.now();
       await pumpHome(tester);
       await tapRecord(tester);

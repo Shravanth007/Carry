@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -110,10 +111,32 @@ abstract final class Recorder {
     return folder;
   }
 
+  /// A start that hasn't finished yet. A second caller waits for it rather
+  /// than starting a rival recording on the same microphone.
+  static Future<void>? _starting;
+
   /// Starts recording into the app's own folder. Throws if the phone refuses,
   /// which the caller turns into a message.
-  static Future<void> start() async {
-    if (isRecording) return; // a second tap changes nothing
+  ///
+  /// Starting is serialised: two quick taps wait on one recording instead of
+  /// racing, where the loser would cancel the winner's microphone and leave
+  /// a screen that looks like it's recording but isn't.
+  static Future<void> start() {
+    final already = _starting;
+    if (already != null) return already;
+    if (isRecording) return Future<void>.value(); // already going
+    final work = _startNow();
+    _starting = work;
+    // Clear it however it ends, so a failure doesn't block the next attempt.
+    unawaited(
+      work.then<void>((_) {}, onError: (_, _) {}).whenComplete(() {
+        if (identical(_starting, work)) _starting = null;
+      }),
+    );
+    return work;
+  }
+
+  static Future<void> _startNow() async {
     final mine = ++_session;
     final folder = await _folder();
     final name = _now.millisecondsSinceEpoch;
