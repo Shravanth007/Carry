@@ -17,9 +17,9 @@ GoogleSignInException googleError(GoogleSignInExceptionCode code) =>
 
 /// Firebase testAuth that remembers the credential it was given.
 class TestFirebaseAuth extends MockFirebaseAuth {
-  TestFirebaseAuth({super.signedIn})
+  TestFirebaseAuth({super.signedIn, String uid = 'firebase-uid'})
     : super(
-        mockUser: MockUser(uid: 'firebase-uid', email: testEmail),
+        mockUser: MockUser(uid: uid, email: testEmail),
       );
 
   AuthCredential? lastCredential;
@@ -89,8 +89,11 @@ void failNextSignOut(TestAuth testAuth) {
 
 /// Points [Auth] at the test Firebase and Google for the current test.
 /// Call from `setUp`.
-Future<TestAuth> setUpTestAuth({bool signedIn = false}) async {
-  final firebase = TestFirebaseAuth(signedIn: signedIn);
+Future<TestAuth> setUpTestAuth({
+  bool signedIn = false,
+  String uid = 'firebase-uid',
+}) async {
+  final firebase = TestFirebaseAuth(signedIn: signedIn, uid: uid);
   final google = TestGoogleSignIn();
   GoogleSignInPlatform.instance = google;
   Auth.firebaseForTesting = firebase;

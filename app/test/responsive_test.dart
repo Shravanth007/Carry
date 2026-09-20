@@ -1,4 +1,5 @@
 import 'package:carry/auth/sign_in_screen.dart';
+import 'package:carry/backup/backup_screen.dart';
 import 'package:carry/home/home_screen.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:carry/onboarding/microphone_screen.dart';
@@ -33,6 +34,7 @@ void main() {
     'home': const HomeScreen(name: 'Ada Lovelace', email: testEmail),
     'settings': const SettingsScreen(name: 'Ada Lovelace', email: testEmail),
     'permissions': const PermissionsScreen(),
+    'backup': const BackupScreen(),
   };
 
   // 1.0 is the default. 1.5 is a common accessibility setting, and Android

@@ -106,6 +106,27 @@ class SettingsRow extends StatelessWidget {
   }
 }
 
+/// Marks a row that is announced but not built yet.
+class SoonBadge extends StatelessWidget {
+  const SoonBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: CarryColors.ink.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Soon',
+        style: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(color: CarryColors.muted),
+      ),
+    );
+  }
+}
+
 /// The Google account picture, or the first letter when there isn't one.
 class Avatar extends StatelessWidget {
   const Avatar({

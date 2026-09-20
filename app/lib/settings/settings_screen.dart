@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
+import '../backup/backup.dart';
+import '../backup/backup_screen.dart';
 import '../session.dart';
 import '../theme.dart';
 import 'permissions_screen.dart';
@@ -31,6 +33,20 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _signingOut = false;
+
+  /// Null until read from the phone.
+  bool? _backupOn;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackup();
+  }
+
+  Future<void> _loadBackup() async {
+    final on = await Backup.isOn();
+    if (mounted) setState(() => _backupOn = on);
+  }
 
   Future<void> _signOut() async {
     setState(() => _signingOut = true);
@@ -115,11 +131,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
+                SettingsRow(
+                  title: 'Backup',
+                  subtitle: switch (_backupOn) {
+                    null => 'Where recordings are kept',
+                    true => 'Carry cloud: on',
+                    false => 'Off. Recordings stay on this phone',
+                  },
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: CarryColors.muted,
+                  ),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BackupScreen(),
+                      ),
+                    );
+                    await _loadBackup(); // it may have been switched there
+                  },
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
                 // Not built yet: shown so it's clearly on the way.
                 const SettingsRow(
                   title: 'MCP',
                   subtitle: 'Let your AI tools read your notes',
-                  trailing: _SoonBadge(),
+                  trailing: SoonBadge(),
                   titleColor: CarryColors.muted,
                 ),
               ],
@@ -144,26 +181,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SoonBadge extends StatelessWidget {
-  const _SoonBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: CarryColors.ink.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        'Soon',
-        style: Theme.of(context).textTheme.labelMedium
-            ?.copyWith(color: CarryColors.muted),
       ),
     );
   }
