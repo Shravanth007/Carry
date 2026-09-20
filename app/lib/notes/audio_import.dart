@@ -61,9 +61,11 @@ Future<ImportResult> importAudio() async {
   final now = DateTime.now();
   final note = Note(
     id: '${now.microsecondsSinceEpoch}',
+    ownerUid: Notes.owner,
     title: name.substring(0, name.length - extension.length - 1),
     path: file.path,
     addedAt: now,
+    bytes: bytes,
   );
   Notes.add(note);
   return (note: note, error: null);

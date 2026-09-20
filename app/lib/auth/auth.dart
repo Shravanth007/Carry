@@ -22,7 +22,17 @@ abstract final class Auth {
   // On Android the server client ID is read from google-services.json.
   static Future<void> init() => _google.initialize();
 
-  static User? get currentUser => _firebase.currentUser;
+  /// Null when signed out, and also when Firebase was never started — which
+  /// is how widget previews run. `main()` awaits `Firebase.initializeApp`
+  /// before the app builds, so a real app can't reach this any other way.
+  static User? get currentUser {
+    try {
+      return _firebase.currentUser;
+    } catch (e) {
+      debugPrint('No Firebase, treating as signed out: $e');
+      return null;
+    }
+  }
 
   static Stream<User?> get userChanges => _firebase.authStateChanges();
 

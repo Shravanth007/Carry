@@ -6,7 +6,7 @@ What the home screen shows, how audio gets in, and what moved to settings.
 
 | Screen | Shows |
 |---|---|
-| Home ("Notes") | The notes, a record button, and an import button. Nothing else |
+| Home ("Notes") | The notes, a record button, an import button, and the recording bar while one runs |
 | Settings | Account, permissions, MCP (soon), sign out |
 
 Home's app bar has import and settings. The **Record** pill sits at the
@@ -14,10 +14,35 @@ bottom right, sized and placed for a thumb, because recording is the main
 thing people open the app to do. Anything that isn't a note belongs in
 settings.
 
-**Recording isn't built yet.** The button is real, and so is its microphone
-check: it asks for the microphone, says what to do when that's refused, and
-then reports that recording is coming. The `ponytail:` comment in
-`home_screen.dart` marks the line to replace with the recorder.
+## Recording
+
+Tapping **Record** asks for the microphone if needed, then starts recording
+and puts a black bar at the bottom of the same screen. There is no separate
+recording screen on purpose: you keep seeing your notes, and the bar is the
+one place that says a recording is running.
+
+The bar shows a pulsing red dot, the elapsed time, a live level meter, and
+**pause**, **throw away** and **Save**.
+
+- **Pause** stops the clock and the meter, and the dot stops pulsing.
+  Paused time isn't counted: 4s recorded, 30s paused, 2s recorded is a
+  6-second note.
+- **Throw away** asks first, and says how much would be lost.
+- **Save** writes the note. Anything under a second is treated as a mis-tap:
+  nothing is saved and the file is deleted.
+
+**Quality:** mono AAC at 32 kbps, 16 kHz. An hour is about 14 MB, which is
+under the transcriber's 25 MB limit and cheap to upload. Files live in the
+app's own folder, named by timestamp.
+
+**The phone can take the microphone back** (a call arrives, the app goes to
+the background). Carry saves what it has rather than losing it. Recording
+while the app isn't in front needs a foreground service and
+`FOREGROUND_SERVICE_MICROPHONE`, which isn't built.
+
+**The hardware sits behind `RecorderBackend`**, so tests run a stand-in that
+writes real files, and `Recorder` itself is the only place that talks to the
+microphone.
 
 ## Notes
 
@@ -25,8 +50,14 @@ then reports that recording is coming. The `ponytail:` comment in
 `ValueNotifier`, so home rebuilds when a note arrives and nothing has to be
 refreshed by hand.
 
-A note is: an id, a title (the file name without its extension), the path to
-the audio on the phone, and when it was added.
+A note is: an id, **the owner's Firebase user ID**, a title (the time it was
+recorded, or an imported file's name), the path to the audio on the phone,
+when it was added, and its length and size where known.
+
+**Every note carries its owner.** It comes from the signed-in account, never
+from anything typed in, and the server will do the same from the verified
+token. That's what keeps two accounts on one phone apart, and it's what note
+rows will be keyed on.
 
 **Today they live in memory**, so they disappear when the app restarts. That's
 marked in the code with a `ponytail:` comment. Drift replaces the list, and
@@ -61,7 +92,11 @@ so the name is taken from the last path segment rather than trusted.
   server's upload endpoint come next, and the tile reads "Not transcribed yet"
   until then.
 - **Opening a note.** Tiles don't tap through to anything.
-- **Deleting a note**, and **recording inside Carry**.
+- **Deleting a note.**
+- **Orphan recordings.** If the app is killed mid-recording, the file stays in
+  the app folder with nothing pointing at it. A sweep at startup belongs with
+  the database work.
+- **A length warning.** Nothing stops an accidental eight-hour recording.
 - **Copying the file.** The note points at the file where the user picked it.
   If they delete it, the path goes stale. Copying into the app's own storage
   belongs with the upload work.
@@ -106,6 +141,12 @@ theme.
 `setUpTestFilePicker()` stands in for the file picker: set `pick` to a file
 built with `testFile('name.m4a', bytes: …)`, or null for cancel. It's in
 `test/helpers/test_files.dart`.
+
+`setUpTestRecorder()` stands in for the microphone, writing real files into a
+temporary folder so size and deletion behave as they would on a phone. Widget
+tests also lend the recorder their clock, and **must not use `pumpAndSettle`
+while the bar is on screen**: its level meter ticks by design, so nothing ever
+settles.
 
 Covered: every check above, cancel, newest-first order, the empty state, the
 snackbar, opening settings, and each settings row.

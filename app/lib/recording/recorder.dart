@@ -1,0 +1,219 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+
+/// Speech, not music: mono at 32 kbps keeps an hour of audio near 14 MB,
+/// which is under the transcriber's 25 MB limit and cheap to upload.
+/// 16 kHz is what the transcriber resamples to anyway.
+const recordingConfig = RecordConfig(
+  encoder: AudioEncoder.aacLc,
+  bitRate: 32000,
+  sampleRate: 16000,
+  numChannels: 1,
+);
+
+enum RecorderState { idle, recording, paused }
+
+/// A recording that was finished and saved.
+@immutable
+class Finished {
+  const Finished({
+    required this.path,
+    required this.duration,
+    required this.bytes,
+  });
+
+  final String path;
+  final Duration duration;
+  final int bytes;
+}
+
+/// What the recorder needs from the phone. The real one wraps the `record`
+/// package; tests put their own in its place.
+abstract interface class RecorderBackend {
+  Future<void> start(String path);
+  Future<void> pause();
+  Future<void> resume();
+
+  /// The finished file's path, or null if the phone gave nothing back.
+  Future<String?> stop();
+
+  /// Stops and throws the recording away.
+  Future<void> cancel();
+
+  /// How loud it is right now, 0 (silence) to 1 (loud).
+  Future<double> level();
+
+  Future<void> dispose();
+}
+
+/// Every recording call in the app goes through here.
+abstract final class Recorder {
+  static RecorderBackend? _backend;
+  static String? _path;
+
+  /// When the current run of recording began. Null while paused.
+  static DateTime? _runningSince;
+
+  /// Time from earlier runs, before the last pause.
+  static Duration _before = Duration.zero;
+
+  static RecorderState _state = RecorderState.idle;
+
+  /// Tests swap in their own recorder and folder.
+  @visibleForTesting
+  static RecorderBackend? backendForTesting;
+
+  /// Tests point this at a temporary folder.
+  @visibleForTesting
+  static Future<Directory> Function()? folderForTesting;
+
+  /// Widget tests run on their own clock, so they lend it to the recorder.
+  @visibleForTesting
+  static DateTime Function()? clockForTesting;
+
+  static DateTime get _now => clockForTesting?.call() ?? DateTime.now();
+
+  static RecorderBackend get _current =>
+      backendForTesting ?? (_backend ??= _DeviceRecorder());
+
+  static RecorderState get state => _state;
+
+  static bool get isRecording => _state != RecorderState.idle;
+
+  static bool get isPaused => _state == RecorderState.paused;
+
+  /// How much audio there is so far, pauses not counted.
+  static Duration get elapsed {
+    final since = _runningSince;
+    return since == null ? _before : _before + _now.difference(since);
+  }
+
+  /// Anything shorter is a mis-tap, not a note.
+  static const shortest = Duration(seconds: 1);
+
+  static Future<Directory> _folder() async {
+    final folder = folderForTesting != null
+        ? await folderForTesting!()
+        : Directory(
+            '${(await getApplicationDocumentsDirectory()).path}'
+            '${Platform.pathSeparator}recordings',
+          );
+    if (!folder.existsSync()) folder.createSync(recursive: true);
+    return folder;
+  }
+
+  /// Starts recording into the app's own folder. Throws if the phone refuses,
+  /// which the caller turns into a message.
+  static Future<void> start() async {
+    if (isRecording) return; // a second tap changes nothing
+    final folder = await _folder();
+    final name = _now.millisecondsSinceEpoch;
+    final path = '${folder.path}${Platform.pathSeparator}$name.m4a';
+    await _current.start(path);
+    _path = path;
+    _before = Duration.zero;
+    _runningSince = _now;
+    _state = RecorderState.recording;
+  }
+
+  /// Keeps the file open and stops adding to it. The clock stops with it.
+  static Future<void> pause() async {
+    if (_state != RecorderState.recording) return;
+    _before = elapsed;
+    _runningSince = null;
+    _state = RecorderState.paused;
+    await _current.pause();
+  }
+
+  static Future<void> resume() async {
+    if (_state != RecorderState.paused) return;
+    await _current.resume();
+    _runningSince = _now;
+    _state = RecorderState.recording;
+  }
+
+  static Future<double> level() => _current.level();
+
+  /// Stops and keeps the file. Null when nothing usable was recorded, in
+  /// which case the file is already gone.
+  static Future<Finished?> stop() async {
+    if (!isRecording) return null;
+    final duration = elapsed;
+    final path = await _current.stop() ?? _path;
+    _reset();
+
+    if (path == null) return null;
+    final file = File(path);
+    // Sync on purpose: these are small local files, and async file I/O
+    // never completes inside a widget test's fake clock.
+    final bytes = file.existsSync() ? file.lengthSync() : 0;
+    // An empty or barely-there file is a mis-tap or a refused microphone.
+    if (bytes == 0 || duration < shortest) {
+      _delete(path);
+      return null;
+    }
+    return Finished(path: path, duration: duration, bytes: bytes);
+  }
+
+  /// Stops and deletes the file.
+  static Future<void> discard() async {
+    if (!isRecording) return;
+    final path = _path;
+    _reset();
+    await _current.cancel();
+    if (path != null) _delete(path);
+  }
+
+  static void _reset() {
+    _path = null;
+    _runningSince = null;
+    _before = Duration.zero;
+    _state = RecorderState.idle;
+  }
+
+  static void _delete(String path) {
+    try {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } catch (e) {
+      // A leftover file wastes space but breaks nothing.
+      debugPrint('Could not delete $path: $e');
+    }
+  }
+}
+
+class _DeviceRecorder implements RecorderBackend {
+  final _recorder = AudioRecorder();
+
+  @override
+  Future<void> start(String path) =>
+      _recorder.start(recordingConfig, path: path);
+
+  @override
+  Future<void> pause() => _recorder.pause();
+
+  @override
+  Future<void> resume() => _recorder.resume();
+
+  @override
+  Future<String?> stop() => _recorder.stop();
+
+  @override
+  Future<void> cancel() => _recorder.cancel();
+
+  @override
+  Future<double> level() async {
+    final amplitude = await _recorder.getAmplitude();
+    // The platform reports decibels, loudest at 0 and silence far below.
+    // -45 dB is quiet-room quiet, so that's the bottom of the bar.
+    const floor = -45.0;
+    final current = amplitude.current.clamp(floor, 0.0);
+    return (current - floor) / -floor;
+  }
+
+  @override
+  Future<void> dispose() => _recorder.dispose();
+}

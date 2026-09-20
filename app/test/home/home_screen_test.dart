@@ -7,10 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 
+import 'package:carry/recording/recorder.dart';
+import 'package:carry/recording/recording_bar.dart';
+
 import '../helpers/pump.dart';
 import '../helpers/test_auth.dart';
 import '../helpers/test_device.dart';
 import '../helpers/test_files.dart';
+import '../helpers/test_recorder.dart';
 
 void main() {
   late TestFilePicker picker;
@@ -88,7 +92,9 @@ void main() {
   group('record button', () {
     Future<void> tapRecord(WidgetTester tester) async {
       await tester.tap(find.byTooltip('Record'));
-      await tester.pumpAndSettle();
+      // Not pumpAndSettle: the bar's level meter ticks forever by design.
+      // A second covers the Scaffold's own animation as the button leaves.
+      await tester.pump(const Duration(seconds: 1));
     }
 
     testWidgets('is the main action on the screen', (tester) async {
@@ -147,12 +153,46 @@ void main() {
       expect(scale(), lessThan(1.0), reason: 'dips while held');
     });
 
-    testWidgets('recording itself is not built yet', (tester) async {
+    testWidgets('starts recording and shows the bar, without leaving', (
+      tester,
+    ) async {
+      setUpTestRecorder();
+      Recorder.clockForTesting = () => tester.binding.clock.now();
       await pumpHome(tester);
 
       await tapRecord(tester);
 
-      expect(find.text('Recording is coming next.'), findsOneWidget);
+      expect(Recorder.isRecording, isTrue);
+      expect(find.byType(RecordingBar), findsOneWidget);
+      expect(find.text('Notes'), findsOneWidget, reason: 'still on the list');
+      // The Scaffold animates the old button out, so check what we set
+      // rather than what is still on screen mid-animation.
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+      expect(
+        scaffold.floatingActionButton,
+        isNull,
+        reason: 'the bar has the controls now',
+      );
+    });
+
+    testWidgets('a saved recording lands on the list', (tester) async {
+      setUpTestRecorder();
+      Recorder.clockForTesting = () => tester.binding.clock.now();
+      await pumpHome(tester);
+      await tapRecord(tester);
+      await tester.pump(const Duration(seconds: 4));
+
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(RecordingBar), findsNothing);
+      expect(
+        find.byTooltip('Record'),
+        findsOneWidget,
+        reason: 'button is back',
+      );
+      expect(Notes.all.value, hasLength(1));
+      expect(find.text('No notes yet'), findsNothing);
     });
   });
 
