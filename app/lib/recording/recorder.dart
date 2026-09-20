@@ -62,6 +62,11 @@ abstract final class Recorder {
 
   static RecorderState _state = RecorderState.idle;
 
+  /// Bumped every time a recording starts or ends. A call that was waiting on
+  /// the phone checks this before touching state: if the number moved, the
+  /// recording it belonged to is over and its answer is stale.
+  static int _session = 0;
+
   /// Tests swap in their own recorder and folder.
   @visibleForTesting
   static RecorderBackend? backendForTesting;
@@ -109,10 +114,17 @@ abstract final class Recorder {
   /// which the caller turns into a message.
   static Future<void> start() async {
     if (isRecording) return; // a second tap changes nothing
+    final mine = ++_session;
     final folder = await _folder();
     final name = _now.millisecondsSinceEpoch;
     final path = '${folder.path}${Platform.pathSeparator}$name.m4a';
     await _current.start(path);
+    if (mine != _session) {
+      // Something ended this recording while the phone was starting it.
+      await _current.cancel();
+      _delete(path);
+      return;
+    }
     _path = path;
     _before = Duration.zero;
     _runningSince = _now;
@@ -122,8 +134,12 @@ abstract final class Recorder {
   /// Keeps the file open and stops adding to it. The clock stops with it.
   static Future<void> pause() async {
     if (_state != RecorderState.recording) return;
+    final mine = _session;
     // The phone first: if it refuses, our state must not claim it paused.
     await _current.pause();
+    // The recording ended while we waited: this answer is about a recording
+    // that no longer exists.
+    if (mine != _session) return;
     _before = elapsed;
     _runningSince = null;
     _state = RecorderState.paused;
@@ -131,7 +147,9 @@ abstract final class Recorder {
 
   static Future<void> resume() async {
     if (_state != RecorderState.paused) return;
+    final mine = _session;
     await _current.resume();
+    if (mine != _session) return;
     _runningSince = _now;
     _state = RecorderState.recording;
   }
@@ -142,8 +160,10 @@ abstract final class Recorder {
   /// which case the file is already gone.
   static Future<Finished?> stop() async {
     if (!isRecording) return null;
+    final mine = _session;
     final duration = elapsed;
     final path = await _current.stop() ?? _path;
+    if (mine != _session) return null; // something else already ended it
     _reset();
 
     if (path == null) return null;
@@ -163,6 +183,9 @@ abstract final class Recorder {
   static Future<void> discard() async {
     if (!isRecording) return;
     final path = _path;
+    // Claim the end straight away: anything already waiting on the phone
+    // must not put the state back afterwards.
+    _session++;
     try {
       await _current.cancel();
     } finally {
@@ -173,6 +196,7 @@ abstract final class Recorder {
   }
 
   static void _reset() {
+    _session++;
     _path = null;
     _runningSince = null;
     _before = Duration.zero;

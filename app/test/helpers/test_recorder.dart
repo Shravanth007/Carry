@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:carry/recording/recorder.dart';
@@ -22,6 +23,9 @@ class TestRecorder implements RecorderBackend {
   /// Set to make pausing fail.
   Object? failOnPause;
 
+  /// Holds a pause open, so a test can land it after the recording ended.
+  Completer<void>? pauseGate;
+
   /// Bytes written when the recording stops. Zero mimics a file the phone
   /// never actually wrote.
   int bytes = 4096;
@@ -45,6 +49,7 @@ class TestRecorder implements RecorderBackend {
   Future<void> pause() async {
     final failure = failOnPause;
     if (failure != null) throw failure;
+    await pauseGate?.future;
     pauses++;
   }
 

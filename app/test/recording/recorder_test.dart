@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:carry/recording/recorder.dart';
@@ -77,6 +78,35 @@ void main() {
     expect(await Recorder.stop(), isNull);
     expect(microphone.stops, 0);
   });
+
+  test(
+    'a pause that lands after the recording ended cannot revive it',
+    () async {
+      // What backgrounding mid-pause does: the save stops the recorder while
+      // the pause is still waiting on the phone.
+      await Recorder.start();
+      final phoneIsThinking = Completer<void>();
+      microphone.pauseGate = phoneIsThinking;
+      final pausing = Recorder.pause();
+      await Recorder.discard(); // the recording ends underneath it
+
+      phoneIsThinking.complete();
+      await pausing;
+
+      expect(
+        Recorder.isRecording,
+        isFalse,
+        reason: 'a stale answer cannot revive it',
+      );
+
+      // And the next recording really starts, rather than being swallowed by
+      // a leftover state.
+      microphone.pauseGate = null;
+      await Recorder.start();
+      expect(Recorder.isRecording, isTrue);
+      expect(Recorder.state, RecorderState.recording);
+    },
+  );
 
   test('a microphone held by another app fails loudly', () async {
     microphone.failOnStart = Exception('busy');
