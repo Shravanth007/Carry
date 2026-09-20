@@ -158,6 +158,10 @@ console and generate a new one.
 
 ## Setup, step by step
 
+The app is already connected to the **carry-92aeb** project, with Google
+sign-in enabled and this machine's debug fingerprints registered, so steps 1
+to 4 are done. They're written down for a new machine or a new project.
+
 **1. Log in to Firebase** (in your own terminal):
 ```
 firebase login --reauth
@@ -165,10 +169,10 @@ firebase login --reauth
 
 **2. Connect the app** (in `app/`):
 ```
-dart pub global run flutterfire_cli:flutterfire configure --platforms=android
+dart pub global run flutterfire_cli:flutterfire configure --project=carry-92aeb --platforms=android
 ```
-Pick or create the project. This writes both app config files and adds the
-Google Services plugin to the Android build.
+This writes both app config files and adds the Google Services plugin to the
+Android build. Everything it generates lives inside `app/`.
 
 **3. Turn on Google sign-in** in the Firebase console, under Authentication →
 Sign-in method → Google.
@@ -178,9 +182,11 @@ Sign-in method → Google.
 keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androiddebugkey -storepass android
 ```
 Every developer machine has its own debug key, so each one needs adding.
-The release key needs adding too before publishing.
+Re-run step 2 afterwards: the fingerprint creates an OAuth client that
+`google-services.json` has to pick up. The release key needs adding too before
+publishing, or sign-in works in debug and fails in the store build.
 
-**5. Give the server its key:**
+**5. Give the server its key** (still to do):
 1. Download the service account JSON (see the table above) to
    `server/secrets/firebase-service-account.json`.
 2. Copy `server/.env.example` to `server/.env`.
@@ -234,7 +240,13 @@ cd server && .venv\Scripts\activate && pytest
 - **Android only.** iOS needs `flutterfire configure --platforms=ios` and a URL
   scheme in `Info.plist`.
 - **No release key yet.** Release builds need their own SHA fingerprints in
-  Firebase.
+  Firebase, and `app/android/app/build.gradle.kts` still signs release builds
+  with the debug key.
+- **The app has never called the server.** `Auth.idToken()` is ready and the
+  server verifies tokens, but nothing joins them up yet. That arrives with the
+  first real endpoint.
+- **Nothing stores the user server-side.** Firebase Auth holds the account.
+  The server will add a row keyed by the same uid when notes need an owner.
 
 ## Adding a sign-in method
 

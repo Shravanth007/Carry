@@ -42,10 +42,23 @@ dart format lib test
 No hooks run automatically. Format, analyze and test yourself before calling
 work done.
 
-CI (`.github/workflows/ci.yml`) runs the same three on every push to a PR:
-`dart format --set-exit-if-changed`, `flutter analyze`, `flutter test`, plus a
-debug APK build. A formatting slip fails the build, so run `dart format`
-before pushing.
+CI (`.github/workflows/ci.yml`) runs on every push to a PR, but only for the
+part of the monorepo you touched:
+
+| You changed | CI runs |
+|---|---|
+| Any file under `app/` | format, analyze, test (~1 min) |
+| `app/android/` or `app/pubspec.*` | the above plus a debug APK build (~5 min) |
+| `server/` only | pytest, and the Flutter jobs skip |
+| anything else | everything |
+
+`dart format --set-exit-if-changed` is part of it, so a formatting slip fails
+the build. Run `dart format lib test` before pushing.
+
+**Pinned on purpose:** `permission_handler` is held at `^12`. Version 13
+compiles against SDK 37, which the Android SDK currently publishes only as
+`android-37.0`, and Gradle can't match it. Don't bump it until a plain
+`platforms;android-37` exists.
 
 ## Rules
 
@@ -102,6 +115,9 @@ For non-trivial work:
 
 ## Git
 
+- `main` is protected: no direct pushes, even for admins. Work on a branch,
+  open a PR, and merge once the **All checks** gate is green and review
+  conversations are resolved.
 - Commit format: `type(app): description`.
   - `type` is one of feat, fix, docs, refactor, test, chore.
   - Imperative mood, subject under 50 characters.

@@ -16,7 +16,8 @@ OnboardingGate   brand-new account → welcome (greeting)
    │                                microphone screen
    │ account already exists               │
    ↓                                      ↓
-home screen      shows a banner if the microphone is off
+home screen      notes, record and import. No permission UI here:
+                 it lives in Settings → Permissions
 ```
 
 The two steps are gated on different things, because they're about different
@@ -30,7 +31,8 @@ things:
 Consequences, all of them deliberate:
 - An account that already exists goes straight to home, **even on a fresh
   install or a new phone**. Someone coming back doesn't get greeted like a
-  stranger. If that phone needs the microphone, home's banner asks for it.
+  stranger. If that phone needs the microphone, the record button asks for it
+  when tapped, and Settings → Permissions can turn it on.
 - A second account on a phone that already allows the microphone gets the
   greeting and nothing else. Nobody is asked for a permission the phone has
   already given.
@@ -87,8 +89,8 @@ shows to people whose phone is already set up.
 
 Only shows when the phone hasn't granted the microphone. It explains why before
 the system prompt appears, and offers **Allow microphone** and **Not now**.
-Either choice moves on to home. Saying no is not a dead end: home shows a
-reminder banner.
+Either choice moves on to home. Saying no is not a dead end: tapping Record
+asks again, and Settings → Permissions can turn it on any time.
 
 The welcome is marked done only at the very end. An app closed part-way
 through starts the flow again, rather than skipping an explanation the
@@ -102,8 +104,8 @@ several states to three:
 | State | Meaning | What the UI does |
 |---|---|---|
 | `granted` | Recording is allowed | Nothing |
-| `denied` | Not allowed, but the system will still prompt | Offer **Turn on**, which prompts |
-| `blocked` | The system won't prompt again ("never ask again", or a restricted phone) | Offer **Open settings** |
+| `denied` | Not allowed, but the system will still prompt | The permissions switch prompts, and so does the record button |
+| `blocked` | The system won't prompt again ("never ask again", or a restricted phone) | A dialog explains, and offers **Open settings** |
 
 | Call | What it does |
 |---|---|
@@ -114,13 +116,14 @@ several states to three:
 **Android quirk that shapes the UI:** Android cannot report "never ask again"
 from a status check. `micStatus()` returns `denied` for it, and only
 `requestMic()` comes back `blocked` — resolved instantly by the system, with no
-dialog shown. So after a "never ask again", the banner still says **Turn on**,
-and the tap would otherwise do nothing visible. Home therefore opens Settings
-itself as soon as a request comes back `blocked`. Don't "simplify" that away.
+dialog shown. So after a "never ask again" the switch still looks merely off,
+and flipping it would otherwise do nothing visible. The permissions screen
+therefore goes to phone settings as soon as a request comes back `blocked`.
+Don't "simplify" that away.
 
-**On home:** the state is read when the screen opens, and again whenever the
-app comes back to the foreground, so turning the permission on in Settings
-clears the banner when the user returns.
+**In Settings → Permissions:** the state is read when the screen opens, and
+again when the app comes back to the foreground, so turning the permission on
+in phone settings updates the row when the user returns.
 
 **Android:** `RECORD_AUDIO` is already declared in the manifest. Declaring it
 isn't permission. The prompt above is what grants it.
@@ -132,17 +135,15 @@ isn't permission. The prompt above is what grants it.
 | App is closed mid-flow | Nothing is saved until the end, so the flow starts again next launch |
 | Existing account signs in | Straight home. No greeting, no permission screen |
 | Signing out, then back in with the same account | Straight home |
-| Existing account on a fresh install or new phone | Straight home. The banner asks for the microphone if that phone needs it |
+| Existing account on a fresh install or new phone | Straight home. Tapping Record asks for the microphone, since that phone has never granted it |
 | New second account, phone already allows the microphone | Greeting only. No permission screen, no prompt |
 | New second account, microphone not allowed | Greeting, then the microphone screen |
-| Returning account with the microphone turned off | Straight to home. The banner handles it, rather than onboarding again |
-| User denies the microphone | Welcome finishes, home shows the banner, **Turn on** prompts again |
-| User picks "never ask again" | The welcome switches to **Open settings** and stays put so the reason can be read. **Continue** moves on |
-| A later launch after "never ask again" | The banner says **Turn on** (Android reports it as denied). Tapping it opens Settings, because no prompt can appear |
-| Permission turned on in Settings | The banner clears when the app comes back to the foreground |
-| Second account on the same phone | Gets its own welcome |
-| Same account, new phone | Gets the welcome again |
-| Signing out and back in | No welcome. The flag stays on the device |
+| Returning account with the microphone turned off | Straight to home. Record asks when tapped, rather than onboarding the person again |
+| User denies the microphone | Onboarding finishes anyway. The record button asks again when tapped, and Settings → Permissions can turn it on |
+| User picks "never ask again" during onboarding | The microphone screen switches to **Open settings** and stays put so the reason can be read. **Continue** moves on |
+| A later attempt after "never ask again" | No prompt can appear, so the app opens phone settings rather than leaving a dead button |
+| Permission turned on in phone settings | The permissions row updates when the app comes back to the foreground |
+| Signing out and back in | No welcome: the account is no longer new |
 | Offline | The whole flow works. Nothing here needs the network |
 
 ## Not covered yet
@@ -165,6 +166,6 @@ stands in for the system prompts, where `answer` is what the user taps and
 `prompts` and `settingsOpened` count what happened. Both are in
 `test/helpers/test_device.dart`.
 
-Covered: the flag per account, the gate's three routes, both welcome buttons,
-denied and blocked, and the home banner appearing, clearing and opening
-Settings.
+Covered: the flag per account, the gate's routes for new and existing
+accounts, both microphone-screen buttons, denied and blocked, and the
+permissions switch in each state.
