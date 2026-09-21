@@ -12,4 +12,6 @@ Future<void> signOutAndForget() async {
   await Auth.signOut();
   Notes.clear();
   await AvatarCache.clear();
+  // The backup choice stays: it's this account's own setting, kept per
+  // account, and asking again on every sign-in would be tiresome.
 }

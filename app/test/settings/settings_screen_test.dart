@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:carry/auth/auth.dart';
+import 'package:carry/backup/backup_screen.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/settings/permissions_screen.dart';
 import 'package:carry/settings/settings_screen.dart';
@@ -79,6 +80,19 @@ void main() {
 
     expect(find.byType(PermissionsScreen), findsOneWidget);
     expect(find.text('Microphone'), findsOneWidget);
+  });
+
+  testWidgets('opens backup, and shows whether it is on', (tester) async {
+    await pumpSettings(tester);
+    expect(
+      find.textContaining('Recordings stay on this phone'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Backup'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BackupScreen), findsOneWidget);
   });
 
   testWidgets('shows MCP as on the way, not as something to tap', (

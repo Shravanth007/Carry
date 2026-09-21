@@ -7,7 +7,8 @@ What the home screen shows, how audio gets in, and what moved to settings.
 | Screen | Shows |
 |---|---|
 | Home ("Notes") | The notes, a record button, an import button, and the recording bar while one runs |
-| Settings | Account, permissions, MCP (soon), sign out |
+| Settings | Account, permissions, backup, MCP (soon), sign out |
+| Settings → Backup | Carry cloud switch, and Google Drive as upcoming |
 
 Home's app bar has import and settings. The **Record** pill sits at the
 bottom right, sized and placed for a thumb, because recording is the main
@@ -135,6 +136,23 @@ so the name is taken from the last path segment rather than trusted.
     manual route: Settings → Apps → Carry → Permissions.
   It re-checks when the app comes back to the foreground. See
   [onboarding.md](onboarding.md) for the three states.
+- **Backup:** opens its own screen. **Off until the person turns it on**, and
+  turning it on covers **new recordings only**, so the moment it was switched
+  on is stored next to the flag. A recording made before that was made under
+  the old answer, and uploading it later would be a surprise. Turning it off
+  clears the stamp, so switching it on again doesn't sweep up the gap. Stored
+  per account, and false while signed out, so nothing uploads without an
+  owner. `Backup.shouldUpload(addedAt)` is the rule the upload queue will
+  follow. **Nothing uploads yet**: no upload endpoint exists.
+
+  The rule says no unless the flag and the stamp agree, and both are read for
+  the one account that was signed in when it was asked, re-checked before the
+  answer comes back. A half-written change and a sign-out mid-question both
+  land on "don't upload", which is the only safe way to be wrong here. That's
+  also why `setOn` writes the stamp before the flag in both directions.
+
+  Google Drive sits under it as a "Soon" row, for people who would rather keep
+  recordings in their own Drive.
 - **MCP:** a placeholder row, greyed out with a "Soon" badge and no tap. It
   will let AI tools read your notes. Nothing behind it yet.
 - **Sign out:** `signOutAndForget()` in `lib/session.dart`. It signs out of
