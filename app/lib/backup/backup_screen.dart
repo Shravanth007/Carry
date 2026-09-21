@@ -19,6 +19,7 @@ class BackupScreen extends StatefulWidget {
 class _BackupScreenState extends State<BackupScreen> {
   bool? _on;
   DateTime? _since;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -37,10 +38,23 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
+  /// One answer at a time. Writing the choice and reading it back takes a
+  /// moment, and two taps racing through that can finish in the wrong order
+  /// and leave backup on after the person turned it off.
   Future<void> _toggle(bool on) async {
-    setState(() => _on = on);
-    await Backup.setOn(on);
-    await _load();
+    if (_saving) return;
+    setState(() {
+      _on = on;
+      _saving = true;
+    });
+    try {
+      await Backup.setOn(on);
+    } finally {
+      // What's stored wins, even if the write failed: the switch must never
+      // sit there showing an answer nothing was saved for.
+      await _load();
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   static String _date(DateTime when) {
@@ -82,7 +96,7 @@ class _BackupScreenState extends State<BackupScreen> {
               },
               trailing: Switch(
                 value: on ?? false,
-                onChanged: on == null ? null : _toggle,
+                onChanged: on == null || _saving ? null : _toggle,
                 activeThumbColor: CarryColors.ground,
                 activeTrackColor: CarryColors.ink,
               ),

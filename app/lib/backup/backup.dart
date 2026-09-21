@@ -23,23 +23,33 @@ abstract final class Backup {
   static Future<bool> isOn() async {
     final uid = _uid;
     if (uid == null) return false;
-    return await _prefs.getBool(_onKey(uid)) ?? false;
+    return _readOn(uid);
   }
 
   /// When backup was switched on, or null while it's off.
   static Future<DateTime?> onSince() async {
     final uid = _uid;
     if (uid == null) return null;
+    return _readSince(uid);
+  }
+
+  static Future<bool> _readOn(String uid) async =>
+      await _prefs.getBool(_onKey(uid)) ?? false;
+
+  static Future<DateTime?> _readSince(String uid) async {
     final millis = await _prefs.getInt(_sinceKey(uid));
     return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
   /// Turning it on stamps the moment. Turning it off clears the stamp, so
   /// turning it on again doesn't sweep up everything recorded in between.
+  ///
+  /// The stamp is written before the flag either way, so a half-finished
+  /// change always lands on "don't upload": switching on leaves the flag
+  /// false, and switching off leaves no stamp.
   static Future<void> setOn(bool on) async {
     final uid = _uid;
     if (uid == null) return;
-    await _prefs.setBool(_onKey(uid), on);
     if (on) {
       await _prefs.setInt(
         _sinceKey(uid),
@@ -48,21 +58,23 @@ abstract final class Backup {
     } else {
       await _prefs.remove(_sinceKey(uid));
     }
+    await _prefs.setBool(_onKey(uid), on);
   }
 
   /// Whether a recording made at [addedAt] should be uploaded.
   ///
   /// Nothing uploads yet; this is the rule the upload queue will follow.
+  ///
+  /// Both answers have to agree, and both are read for the one account that
+  /// was signed in when the question was asked. If that account is gone by
+  /// the time they come back — signed out, or swapped for another — the
+  /// answer is no, because it was the other person's answer.
   static Future<bool> shouldUpload(DateTime addedAt) async {
-    final since = await onSince();
-    return since != null && !addedAt.isBefore(since);
-  }
-
-  /// Forgets the answer. Called when an account signs out.
-  static Future<void> clear() async {
     final uid = _uid;
-    if (uid == null) return;
-    await _prefs.remove(_onKey(uid));
-    await _prefs.remove(_sinceKey(uid));
+    if (uid == null) return false;
+    final on = await _readOn(uid);
+    final since = await _readSince(uid);
+    if (_uid != uid) return false;
+    return on && since != null && !addedAt.isBefore(since);
   }
 }

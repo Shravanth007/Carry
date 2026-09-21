@@ -72,6 +72,22 @@ void main() {
     expect(await Backup.isOn(), isFalse);
   });
 
+  testWidgets('tapping twice in a hurry still saves what is shown', (
+    tester,
+  ) async {
+    await pumpBackup(tester);
+
+    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(Switch), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(
+      backupSwitch(tester).value,
+      await Backup.isOn(),
+      reason: 'the screen never shows an answer that was not saved',
+    );
+  });
+
   testWidgets('remembers the answer next time the screen opens', (
     tester,
   ) async {
