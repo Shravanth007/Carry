@@ -22,6 +22,7 @@ void main() {
     Notes.add(
       Note(
         id: '1',
+        ownerUid: 'firebase-uid',
         title: 'Private thought',
         path: '/phone/1.m4a',
         addedAt: DateTime.now(),
@@ -53,6 +54,7 @@ void main() {
     Notes.add(
       Note(
         id: '1',
+        ownerUid: 'firebase-uid',
         title: 'Still mine',
         path: '/phone/1.m4a',
         addedAt: DateTime.now(),

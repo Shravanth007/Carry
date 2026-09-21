@@ -3,6 +3,7 @@ import 'package:carry/backup/backup_screen.dart';
 import 'package:carry/home/home_screen.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:carry/onboarding/microphone_screen.dart';
+import 'package:carry/recording/recording_bar.dart';
 import 'package:carry/onboarding/welcome_screen.dart';
 import 'package:carry/settings/permissions_screen.dart';
 import 'package:carry/settings/settings_screen.dart';
@@ -35,6 +36,13 @@ void main() {
     'settings': const SettingsScreen(name: 'Ada Lovelace', email: testEmail),
     'permissions': const PermissionsScreen(),
     'backup': const BackupScreen(),
+    // An hour-long recording gives the clock its widest reading.
+    'recording bar': Scaffold(
+      bottomNavigationBar: RecordingBar(
+        onFinished: (_) {},
+        previewElapsed: const Duration(hours: 1, minutes: 5, seconds: 9),
+      ),
+    ),
   };
 
   // 1.0 is the default. 1.5 is a common accessibility setting, and Android
@@ -65,6 +73,7 @@ void main() {
     Notes.add(
       Note(
         id: '1',
+        ownerUid: 'firebase-uid',
         title: 'Quarterly planning with the whole team about next year' * 3,
         path: '/phone/long.m4a',
         addedAt: DateTime.now(),

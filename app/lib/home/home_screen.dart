@@ -3,7 +3,8 @@ import 'package:flutter/widget_previews.dart';
 
 import '../notes/audio_import.dart';
 import '../notes/notes.dart';
-import '../permissions/permissions.dart';
+import '../recording/recording.dart';
+import '../recording/recording_bar.dart';
 import '../settings/settings_screen.dart';
 import '../theme.dart';
 
@@ -11,8 +12,23 @@ import '../theme.dart';
 Widget homePreview() =>
     const HomeScreen(name: 'Ada Lovelace', email: 'ada@gmail.com');
 
+@Preview(name: 'Recording', size: Size(412, 915), wrapper: previewApp)
+Widget recordingPreview() => Scaffold(
+  appBar: AppBar(title: const Text('Notes')),
+  body: const _EmptyNotes(),
+  bottomNavigationBar: SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+      child: RecordingBar(
+        onFinished: (_) {},
+        previewElapsed: const Duration(seconds: 47),
+      ),
+    ),
+  ),
+);
+
 /// Notes, and the two ways to add one. Everything else lives in settings.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.name,
@@ -24,31 +40,46 @@ class HomeScreen extends StatelessWidget {
   final String email;
   final String? photoUrl;
 
-  Future<void> _import(BuildContext context) async {
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  /// True while the bar at the bottom is running a recording.
+  bool _recording = false;
+
+  /// True between the tap and the microphone actually starting.
+  bool _starting = false;
+
+  Future<void> _import() async {
     final result = await importAudio();
     final error = result.error;
-    if (error == null || !context.mounted) return;
-    _say(context, error);
+    if (error == null || !mounted) return;
+    _say(error);
   }
 
-  Future<void> _record(BuildContext context) async {
-    var mic = await Permissions.micStatus();
-    if (mic != MicPermission.granted) mic = await Permissions.requestMic();
-    if (!context.mounted) return;
-    if (mic != MicPermission.granted) {
-      _say(
-        context,
-        "Carry can't record without the microphone. "
-        'Turn it on in Settings → Permissions.',
-      );
+  Future<void> _record() async {
+    if (_starting) return; // one tap is enough
+    setState(() => _starting = true);
+    // Permission, hardware and wording all live in Recording.
+    final problem = await Recording.begin();
+    if (!mounted) return;
+    setState(() => _starting = false);
+    if (problem != null) {
+      _say(problem);
       return;
     }
-    // ponytail: the button and its permission check are real; capturing audio
-    // isn't built yet. Replace this line with the recorder.
-    _say(context, 'Recording is coming next.');
+    setState(() => _recording = true);
   }
 
-  void _say(BuildContext context, String message) =>
+  /// The bar is done: it either saved a note, or has a sentence explaining
+  /// why there was nothing to save.
+  void _recordingFinished(String? message) {
+    setState(() => _recording = false);
+    if (message != null) _say(message);
+  }
+
+  void _say(String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
@@ -63,7 +94,7 @@ class HomeScreen extends StatelessWidget {
             iconSize: 30,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             tooltip: 'Import audio',
-            onPressed: () => _import(context),
+            onPressed: _import,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -73,9 +104,9 @@ class HomeScreen extends StatelessWidget {
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => SettingsScreen(
-                  name: name,
-                  email: email,
-                  photoUrl: photoUrl,
+                  name: widget.name,
+                  email: widget.email,
+                  photoUrl: widget.photoUrl,
                 ),
               ),
             ),
@@ -94,12 +125,22 @@ class HomeScreen extends StatelessWidget {
               ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Padding(
-        // Sits well clear of the phone's gesture bar: there's no nav bar of
-        // ours down there, and this is where the thumb lands.
-        padding: const EdgeInsets.only(bottom: 44, right: 4),
-        child: _RecordButton(onPressed: () => _record(context)),
-      ),
+      floatingActionButton: _recording
+          ? null // the bar below has the controls while recording
+          : Padding(
+              // Sits well clear of the phone's gesture bar: there's no nav bar
+              // of ours down there, and this is where the thumb lands.
+              padding: const EdgeInsets.only(bottom: 44, right: 4),
+              child: _RecordButton(onPressed: _record),
+            ),
+      bottomNavigationBar: _recording
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                child: RecordingBar(onFinished: _recordingFinished),
+              ),
+            )
+          : null,
     );
   }
 }

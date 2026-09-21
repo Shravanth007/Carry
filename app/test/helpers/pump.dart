@@ -24,5 +24,16 @@ Future<void> pumpScreen(
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   }
-  await tester.pumpWidget(MaterialApp(home: screen));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        // Animations off, as an accessibility setting would: dialogs open at
+        // once, and anything that repeats forever can't stall a settle.
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: screen,
+        ),
+      ),
+    ),
+  );
 }
