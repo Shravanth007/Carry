@@ -75,6 +75,11 @@ checks** gate is green.
   reporting a server problem.
 - **Packages:** don't add one for something a few lines can do. Pin versions in
   `requirements.txt`, and put test-only packages in `requirements-dev.txt`.
+- **Calling Groq:** use `httpx`, not `urllib`. Groq sits behind Cloudflare,
+  which rejects `Python-urllib`'s user agent with a 403 (error 1010) before
+  the request reaches Groq, so a working key looks like a rejected one. `httpx`
+  arrives transitively through `firebase-admin` today: pin it in
+  `requirements.txt` when the transcription service starts importing it.
 
 ## Testing
 
