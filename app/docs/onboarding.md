@@ -152,7 +152,10 @@ isn't permission. The prompt above is what grants it.
   starts pushing "your note is ready".
 - **iOS.** It needs `NSMicrophoneUsageDescription` in `Info.plist` (the sentence
   Apple shows in its prompt) and the `PERMISSION_MICROPHONE` flag in the
-  Podfile. Without both, iOS crashes on the prompt or always denies.
+  Podfile. Without both, iOS crashes on the prompt or always denies. iOS also
+  inverts the quirk above: it asks once, and after a denial `micStatus()`
+  reports `blocked` straight away, so "tapping Record asks again" is an
+  Android-only promise. See [ios.md](ios.md).
 - **Background recording.** Recording while the app isn't in front needs a
   foreground service and `FOREGROUND_SERVICE_MICROPHONE` in the manifest.
 - **No way to replay the welcome.** It can go in settings later.

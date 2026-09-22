@@ -35,6 +35,12 @@ Future<ImportResult> importAudio() async {
         label: 'Audio',
         extensions: audioExtensions.toList(),
         mimeTypes: const ['audio/*'],
+        // iOS filters by uniform type identifier and throws on a group that
+        // gives it none, so the extension list alone doesn't reach the
+        // picker there. The umbrella type covers every audio format the
+        // phone knows; the extension check below is what actually decides.
+        // Ignored on Android, which filters on the two lines above.
+        uniformTypeIdentifiers: const ['public.audio'],
       ),
     ],
   );

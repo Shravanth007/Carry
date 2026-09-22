@@ -5,7 +5,8 @@ Guidance for Claude Code when working on the Carry Flutter app.
 ## What this is
 
 Carry is a voice notes app. You record a thought, the server transcribes it,
-and it comes back as a written note. Android comes first and iOS later.
+and it comes back as a written note. Android comes first; iOS is being stood
+up next to it, and [docs/ios.md](docs/ios.md) is the runbook.
 The backend lives in `../server` and has its own CLAUDE.md.
 
 **Stack:** Flutter, Firebase Auth, and Material 3 with our own theme.
@@ -18,6 +19,7 @@ The backend lives in `../server` and has its own CLAUDE.md.
 | Sign-in, tokens, Firebase setup, calling the server | [docs/auth.md](docs/auth.md) |
 | Welcome screen, new vs returning users, permissions | [docs/onboarding.md](docs/onboarding.md) |
 | Home screen, notes, importing audio, settings | [docs/notes.md](docs/notes.md) |
+| Building for iOS, signing, what differs from Android | [docs/ios.md](docs/ios.md) |
 
 Each feature gets its own doc in `docs/` explaining how it works. When you add
 a doc, add a row here. When you change how a feature works, update its doc.
@@ -49,6 +51,7 @@ part of the monorepo you touched:
 |---|---|
 | Any file under `app/` | format, analyze, test (~1 min) |
 | `app/android/` or `app/pubspec.*` | the above plus a debug APK build (~5 min) |
+| `app/ios/` or `app/pubspec.*` | an unsigned iOS build, once `app/ios/` exists |
 | `server/` only | pytest, and the Flutter jobs skip |
 | anything else | everything |
 

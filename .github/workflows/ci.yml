@@ -25,6 +25,7 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
       server: ${{ steps.filter.outputs.server }}
       android: ${{ steps.filter.outputs.android }}
+      ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -33,9 +34,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # iOS only builds once the platform folder exists. Until
+          # `flutter create --platforms=ios` has run there is nothing to
+          # build, so the job turns itself off rather than failing every PR.
+          [ -d app/ios ] && has_ios=true || has_ios=false
+
           # A push to main always runs everything.
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
+            printf 'app=true\nserver=true\nandroid=true\nios=%s\n' \
+              "$has_ios" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git fetch -q --depth=1 origin "${{ github.base_ref }}"
@@ -45,7 +52,8 @@ jobs:
           # Anything that isn't clearly app-only or server-only runs
           # everything: a new root-level file must never skip every check.
           if echo "$files" | grep -qvE '^(app|server)/'; then
-            printf 'app=true\nserver=true\nandroid=true\n' >> "$GITHUB_OUTPUT"
+            printf 'app=true\nserver=true\nandroid=true\nios=%s\n' \
+              "$has_ios" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -55,9 +63,14 @@ jobs:
           # Firebase wiring, which Dart-only changes can't break.
           echo "$files" | grep -qE '^app/(android/|pubspec\.(yaml|lock))' \
             && android=true || android=false
-          echo "app=$app server=$server android=$android"
-          printf 'app=%s\nserver=%s\nandroid=%s\n' "$app" "$server" "$android" \
-            >> "$GITHUB_OUTPUT"
+          # Same reasoning for iOS: the Xcode build catches CocoaPods,
+          # Info.plist and Firebase wiring that analyze never sees.
+          echo "$files" | grep -qE '^app/(ios/|pubspec\.(yaml|lock))' \
+            && ios=true || ios=false
+          [ "$has_ios" = true ] || ios=false
+          echo "app=$app server=$server android=$android ios=$ios"
+          printf 'app=%s\nserver=%s\nandroid=%s\nios=%s\n' \
+            "$app" "$server" "$android" "$ios" >> "$GITHUB_OUTPUT"
 
   app:
     name: App — analyze and test
@@ -121,13 +134,34 @@ jobs:
       # Catches Gradle, Firebase and plugin problems that analyze can't see.
       - run: flutter build apk --debug
 
+  ios:
+    name: App — build iOS app
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    # Free for public repositories, so this costs nothing here.
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # No signing: CI holds no certificate, and the build still catches the
+      # CocoaPods, Info.plist and Firebase wiring that analyze can't see.
+      - run: flutter build ios --no-codesign
+
   # The one check branch protection requires. Everything above hangs off it,
   # so adding or renaming a job never means touching the protection rules.
   # `always()` matters: without it this would be skipped when a job fails,
   # and a skipped check counts as passed.
   all-checks:
     name: All checks
-    needs: [changes, app, server, android]
+    needs: [changes, app, server, android, ios]
     if: always()
     runs-on: ubuntu-latest
     steps:
