@@ -7,6 +7,9 @@ class TestFilePicker extends FileSelectorPlatform {
   /// What the picker returns. Null means the user cancelled.
   XFile? pick;
 
+  /// The filter the app asked for, so a test can check what it requests.
+  List<XTypeGroup>? lastTypeGroups;
+
   int opens = 0;
 
   @override
@@ -16,6 +19,7 @@ class TestFilePicker extends FileSelectorPlatform {
     String? confirmButtonText,
   }) async {
     opens++;
+    lastTypeGroups = acceptedTypeGroups;
     return pick;
   }
 }

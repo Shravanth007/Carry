@@ -22,7 +22,7 @@ the App Store.
 |---|---|
 | A Mac with **Xcode** (not just Command Line Tools) | Only Xcode builds and signs an iOS app. `xcode-select -p` must point inside `Xcode.app`. |
 | **CocoaPods** | Flutter's iOS plugins are Pods. `flutter run` calls `pod install` for you. |
-| An iPhone on **iOS 15 or newer** | `firebase_core 4.14.0` pulls the Firebase iOS SDK 12, which floors the deployment target at 15.0. That's the highest floor in the tree, so it sets the target. |
+| An iPhone on **iOS 15 or newer** | `firebase_core 4.14.0` pulls the Firebase iOS SDK 12, which floors the deployment target at 15.0 — the highest floor in the tree, so it sets the target. Read from the locked versions, not from a podspec: `pod install` prints the real floor and will say so if it's higher. |
 | A plain **Apple ID** | Free personal-team signing runs the app on your own device. The paid Developer Program is only for distribution. |
 
 **Free signing has two limits**, both fine for a demo: the provisioning
@@ -77,13 +77,19 @@ identifies the project, so it is safe to commit — see
 | `CFBundleURLTypes` → one entry with `REVERSED_CLIENT_ID` | The URL scheme Google redirects back to after the account picker. Without it sign-in opens and never returns. |
 
 **6. Trim permission_handler in the Podfile.** `permission_handler_apple`
-compiles every permission it supports unless told otherwise. Add to
-`post_install` in `ios/Podfile`:
+compiles every permission it supports unless told otherwise. `flutter create`
+already writes the outer block; the inner loop is what you add:
 ```ruby
-target.build_configurations.each do |config|
-  config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-    '$(inherited)', 'PERMISSION_MICROPHONE=1',
-  ]
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)   # already there
+    target.build_configurations.each do |config|    # add from here
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_MICROPHONE=1',
+      ]
+    end
+  end
 end
 ```
 Everything not listed is compiled out, so the binary holds no permission API
