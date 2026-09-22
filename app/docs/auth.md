@@ -237,8 +237,9 @@ cd server && .venv\Scripts\activate && pytest
   signed-out-everywhere user keeps access until their token expires, at most
   1 hour. Turn it on for sensitive endpoints if needed.
 - **Google only.** Phone OTP is next and will be added as methods on `Auth`.
-- **Android only.** iOS needs `flutterfire configure --platforms=ios` and a URL
-  scheme in `Info.plist`.
+- **Android only for now.** iOS needs its own Firebase app, a
+  `GoogleService-Info.plist`, and `GIDClientID` plus a URL scheme in
+  `Info.plist`. See [ios.md](ios.md).
 - **No release key yet.** Release builds need their own SHA fingerprints in
   Firebase, and `app/android/app/build.gradle.kts` still signs release builds
   with the debug key.

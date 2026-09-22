@@ -1,5 +1,6 @@
 import 'package:carry/notes/audio_import.dart';
 import 'package:carry/notes/notes.dart';
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_files.dart';
@@ -87,5 +88,19 @@ void main() {
         reason: '.$extension should import',
       );
     }
+  });
+
+  // Each platform reads a different field, and iOS throws outright on a group
+  // that gives it no identifier. Dropping one would break that platform alone,
+  // while every test here kept passing.
+  test('asks for audio in terms every platform understands', () async {
+    picker.pick = testFile('note.m4a');
+
+    await importAudio();
+
+    final XTypeGroup group = picker.lastTypeGroups!.single;
+    expect(group.extensions, containsAll(audioExtensions));
+    expect(group.mimeTypes, contains('audio/*'));
+    expect(group.uniformTypeIdentifiers, contains('public.audio'));
   });
 }

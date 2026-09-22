@@ -99,6 +99,12 @@ if real recordings hit it.
 **Watch out:** some pickers return a whole path where a file name is expected,
 so the name is taken from the last path segment rather than trusted.
 
+**Two filters, one group:** Android filters by extension and MIME type, iOS by
+uniform type identifier, and iOS throws on a type group that gives it none. The
+group carries all three, and `public.audio` deliberately lets more through than
+the extension list — the check above is what actually decides. See
+[ios.md](ios.md).
+
 ## Not built yet
 
 - **Uploading.** An imported note sits on the phone. The sync queue and the
