@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth.dart';
+import '../limits.dart';
 import '../notes/notes.dart';
 import '../permissions/permissions.dart';
 import 'recorder.dart';
@@ -22,6 +23,11 @@ abstract final class Recording {
   static bool get isPaused => Recorder.isPaused;
 
   static Duration get elapsed => Recorder.elapsed;
+
+  /// True once a recording has run as long as one is allowed to. The bar
+  /// stops it and keeps what it has: a recording that grew past what can be
+  /// uploaded would be a recording nobody can transcribe.
+  static bool get atLimit => inProgress && elapsed >= Limits.recording;
 
   /// How loud it is now, 0 to 1. Silent while paused.
   static Future<double> level() async {

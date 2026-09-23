@@ -49,14 +49,7 @@ class _RecordingBarState extends State<RecordingBar> {
     // Without a foreground service the phone can cut the microphone once
     // Carry is out of sight, so keep what there is rather than lose it.
     _lifecycle = AppLifecycleListener(onPause: _saveBeforeTheAppGoes);
-    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) async {
-      final level = await Recording.level();
-      if (!mounted) return;
-      setState(() {
-        _elapsed = Recording.elapsed;
-        _level = level;
-      });
-    });
+    _startTicking();
   }
 
   @override
@@ -83,7 +76,9 @@ class _RecordingBarState extends State<RecordingBar> {
     if (problem != null) _say(problem);
   }
 
-  Future<void> _save() async {
+  /// [andSay] is shown when the save worked but wasn't asked for, so the
+  /// person isn't left wondering why the bar went away.
+  Future<void> _save({String? andSay}) async {
     if (_finishing) return; // a second tap must not save twice
     setState(() => _finishing = true);
     _ticker?.cancel();
@@ -98,7 +93,7 @@ class _RecordingBarState extends State<RecordingBar> {
       _say(result.message!);
       return;
     }
-    widget.onFinished(result.message);
+    widget.onFinished(result.message ?? andSay);
   }
 
   Future<void> _discard() async {
@@ -136,6 +131,17 @@ class _RecordingBarState extends State<RecordingBar> {
         _elapsed = Recording.elapsed;
         _level = level;
       });
+      // Long enough. Keep what there is instead of letting it grow into
+      // something that can't be uploaded.
+      if (Recording.atLimit) {
+        unawaited(
+          _save(
+            andSay:
+                'That is as long as a recording can be, so '
+                'Carry saved it.',
+          ),
+        );
+      }
     });
   }
 

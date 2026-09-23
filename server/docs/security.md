@@ -68,6 +68,26 @@ a worker thread, so requests for one account really do arrive at the same
 moment; without the lock each of them sees room before any records its hit,
 and they all get through.
 
+## What a client that ignores the app's gates gets
+
+The Flutter app refuses a recording over an hour and a file over 25 MB. That
+is a courtesy, and anyone can strip it out. Here is what they meet instead:
+
+| They try | Answer today | Answer once uploads land |
+|---|---|---|
+| No token, a forged one, another project's, an expired one | `401` | `401` |
+| A token for a blocked account | `403` | `403` |
+| More requests than the allowance | `429` + `Retry-After` | `429` + `Retry-After` |
+| A body over `MAX_BODY_BYTES` | `413`, before the body is read | `413` |
+| Asking to upload a file over the cap | — | `413`, before anything is signed |
+| A file that turns out bigger than claimed | — | S3 refuses it: the presigned URL carries a content-length range |
+| More recordings than the daily quota | — | `429` + `Retry-After`, and no URL is signed |
+| Someone else's recording id | — | `404`, the same answer as one that doesn't exist |
+
+The point of the pattern: **the app's number and the server's number are the
+same number, and only one of them is load-bearing.** If they ever disagree,
+the server wins and the person sees the server's sentence.
+
 ## Blocking an account
 
 There is no admin UI, and there doesn't need to be:

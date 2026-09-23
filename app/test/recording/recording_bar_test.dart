@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:carry/limits.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/recording/recorder.dart';
@@ -44,6 +45,28 @@ void main() {
     );
     await tester.pump(Duration(seconds: seconds));
   }
+
+  group('the length cap', () {
+    testWidgets('keeps what was recorded instead of running past it', (
+      tester,
+    ) async {
+      await showBar(tester, seconds: Limits.recording.inSeconds);
+      await tester.pump(const Duration(milliseconds: 200)); // the next tick
+
+      expect(Notes.all.value, hasLength(1));
+      expect(finishedTimes, 1);
+      expect(finishedWith, contains('as long as a recording can be'));
+      expect(microphone.stops, 1);
+    });
+
+    testWidgets('leaves a shorter recording alone', (tester) async {
+      await showBar(tester, seconds: Limits.recording.inSeconds - 5);
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(Notes.all.value, isEmpty);
+      expect(finishedTimes, 0);
+    });
+  });
 
   testWidgets('counts the seconds up', (tester) async {
     await showBar(tester, seconds: 75);

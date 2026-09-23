@@ -88,13 +88,29 @@ The file comes from outside the app, so nothing about it is trusted:
 |---|---|
 | Extension is one we transcribe (m4a, mp3, wav, aac, ogg, opus, flac, amr, wma) | "That isn't an audio file. Pick a recording." |
 | Not empty | "That file is empty. Pick another recording." |
-| Under 200 MB | "That file is over 200 MB. Pick a shorter one." |
+| Under `Limits.uploadBytes` (25 MB) | "That file is over 25 MB. Pick a shorter one." |
 
 Home shows these in a snackbar. A refused file adds nothing.
 
-**Why the size cap:** the file has to survive an upload later. 200 MB is
-roughly a long meeting at ordinary quality. Raise it in `audio_import.dart`
-if real recordings hit it.
+**Why the size cap:** the transcriber refuses a file over 25 MB, so carrying
+a bigger one across the network would only end in a failure later. The number
+lives in `lib/limits.dart` with the recording cap, not here.
+
+## Limits
+
+`lib/limits.dart` holds both caps the app checks:
+
+| Limit | Value | What the app does |
+|---|---|---|
+| One recording | 1 hour (about 14 MB at our bitrate) | The bar saves it and says "That is as long as a recording can be, so Carry saved it." |
+| One file | 25 MB | Import refuses it before anything is read |
+
+**These are courtesies, not protection.** The repo is public, so a client that
+ignores them is a fifteen-minute job. The server checks the same numbers again
+from the token and from the file it receives, and that is the check that
+counts — see [../../server/docs/security.md](../../server/docs/security.md).
+What the app's gate buys is the person hearing "no" in the moment rather than
+after a long upload.
 
 **Watch out:** some pickers return a whole path where a file name is expected,
 so the name is taken from the last path segment rather than trusted.

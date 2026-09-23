@@ -74,6 +74,9 @@ compiles against SDK 37, which the Android SDK currently publishes only as
   The one exception is `AvatarCache`, which downloads a Google profile
   picture: another host, no Carry token.
 - Features don't reach into each other.
+- Numbers the server also enforces live in `lib/limits.dart`, never inline in
+  a screen. The app's copy is there to answer quickly; the server's is the one
+  that decides.
 - Screens take plain values, not Firebase objects, so they can be previewed
   and tested.
 - Before `runApp`, only initialize Firebase and `Auth`. Everything else runs

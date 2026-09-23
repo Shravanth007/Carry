@@ -1,3 +1,4 @@
+import 'package:carry/limits.dart';
 import 'package:carry/notes/audio_import.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
@@ -69,11 +70,11 @@ void main() {
     });
 
     test('a file over the size limit', () async {
-      picker.pick = testFile('marathon.m4a', bytes: maxImportBytes + 1);
+      picker.pick = testFile('marathon.m4a', bytes: Limits.uploadBytes + 1);
 
       final result = await importAudio();
 
-      expect(result.error, 'That file is over 200 MB. Pick a shorter one.');
+      expect(result.error, 'That file is over 25 MB. Pick a shorter one.');
       expect(Notes.all.value, isEmpty);
     });
   });
