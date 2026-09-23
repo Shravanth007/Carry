@@ -124,6 +124,33 @@ Every change comes with tests, and `flutter test` must pass.
   user can see, the loading state, and retry.
 - **Test names** describe behavior, e.g. "closing the picker shows no error".
 
+## Before raising a PR: review your own diff
+
+`flutter analyze` and a green suite are not a review. Tests written alongside
+the code agree with the code's own assumptions, so they cannot catch an
+assumption that was wrong. **Read the whole diff before opening the PR**, as if
+someone else wrote it, and look for the things a test can't see:
+
+1. **Read `git diff main...HEAD` top to bottom.** Every hunk. If a hunk is hard
+   to explain out loud, that's the one with the bug in it.
+2. **Check each change against the rule it is supposed to follow** — the rules
+   in this file and in the feature's doc. Breaking a rule you wrote in the same
+   PR is the easiest mistake to make and the easiest to catch by re-reading.
+3. **Anything in a `build` method that isn't drawing.** A build runs again on
+   every rebuild: no side effects, no counting, no navigation, no writes.
+4. **Anything that can fire twice**, or fire when nothing happened: a teardown
+   path, a stream that re-emits, a call that was ignored further down.
+5. **Follow every value that leaves the app** — to the server, to analytics, to
+   a log — back to where it came from. If any of it is user text, a file name or
+   an exception message, it is a leak until proven otherwise.
+6. **New package?** Build the app, not just the tests. A plugin that breaks the
+   Android build passes every unit test first.
+7. **Then run it:** `dart format lib test`, `flutter analyze lib test`,
+   `flutter test`. Zero issues, and read the failures rather than re-running.
+
+Write the one-line reason for each finding into the PR body. If the review finds
+nothing, say so in the PR: that is a claim worth making explicitly.
+
 ## Planning
 
 For non-trivial work:
