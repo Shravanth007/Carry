@@ -56,6 +56,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   /// Everything else lives in the phone's settings, so explain that and offer
   /// to go there, rather than letting the switch flick back with no reason.
   Future<void> _sendToPhoneSettings({required bool turningOn}) async {
+    // The system prompt above this can outlive the screen: a session that ends
+    // while it is up takes every pushed screen with it.
+    if (!mounted) return;
     final go = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

@@ -92,7 +92,7 @@ start), and push notification capture (there is no push).
 | Event | Properties |
 |---|---|
 | `import_opened`, `import_cancelled` | |
-| `import_rejected` | `reason`: `wrong_type` / `empty` / `too_large`, `extension`, `size` |
+| `import_rejected` | `reason`: `wrong_type` / `empty` / `too_large` / `could_not_copy`, `extension`, `size` |
 | `import_added` | `extension`, `size`, `notes_after` |
 
 **Settings** — `settings/`, `backup/`

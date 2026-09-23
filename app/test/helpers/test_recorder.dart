@@ -80,9 +80,6 @@ class TestRecorder implements RecorderBackend {
 
   @override
   Future<double> level() async => loudness;
-
-  @override
-  Future<void> dispose() async {}
 }
 
 /// Points [Recorder] at a test microphone and a temporary folder.

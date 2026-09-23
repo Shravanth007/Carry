@@ -112,6 +112,22 @@ counts — see [../../server/docs/security.md](../../server/docs/security.md).
 What the app's gate buys is the person hearing "no" in the moment rather than
 after a long upload.
 
+**The file is copied into the app's own storage.** What the picker hands back
+on Android is a copy in the cache directory (`{cacheDir}/{uuid}/{name}`, see
+`file_selector_android`), and the system clears that whenever it wants space —
+as does "Clear cache" in phone settings. A note pointing there is a note whose
+audio can disappear, so `importAudio` copies the file into
+`{documents}/imports/` under a name of its own and the note points at that. A
+copy that fails is a refusal with a message, never a note pointing nowhere.
+
+Recordings were already safe: they are written straight into
+`{documents}/recordings/`.
+
+**The trade:** imported audio now stays until something deletes it, and nothing
+does yet — there is no way to delete a note. Before, the phone cleared the cache
+copy for us, which is exactly why a note's audio could vanish. Correctness first;
+deleting a note has to remove its file, and that lands with note deletion.
+
 **Watch out:** some pickers return a whole path where a file name is expected,
 so the name is taken from the last path segment rather than trusted.
 
