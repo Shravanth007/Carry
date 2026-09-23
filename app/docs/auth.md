@@ -99,7 +99,7 @@ That one place owns, so that no caller has to remember any of it:
 | The base URL | `--dart-define=CARRY_API=...`, defaulting to `10.0.2.2:8000` for the emulator |
 | The token | `Authorization: Bearer <Auth.idToken()>` on every call. Signed out, the call never leaves the phone |
 | An expired token | A `401` is retried **once** with `forceRefresh: true`. A second `401` gives up rather than looping |
-| Timeouts | 20 seconds |
+| Timeouts | 20 seconds for the whole call, body included: headers arriving doesn't mean the body will |
 | Errors | Anything not 2xx becomes an `ApiFailure` whose `message` is ready to show |
 
 `ApiFailure.message` prefers the server's own `detail`, because the server

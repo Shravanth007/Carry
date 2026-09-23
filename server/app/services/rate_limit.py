@@ -1,3 +1,4 @@
+import threading
 import time
 from collections import defaultdict, deque
 
@@ -26,20 +27,30 @@ class RateLimiter:
     def __init__(self, per_minute: int = config.RATE_LIMIT_PER_MINUTE):
         self.per_minute = per_minute
         self._hits: dict[str, deque[float]] = defaultdict(deque)
+        # FastAPI runs a `def` dependency in a worker thread, so requests for
+        # the same account really do arrive here at the same time. Counting
+        # and allowing have to happen as one step, or a burst of threads each
+        # sees room and they all get through.
+        # ponytail: one lock for every account. It is held for a few
+        # microseconds; give each uid its own only if it ever shows up in a
+        # profile.
+        self._lock = threading.Lock()
 
     def check(self, uid: str, now: float | None = None) -> None:
         """Raises TooMany when this account is over its limit."""
         now = now if now is not None else time.monotonic()
         window_start = now - 60
-        hits = self._hits[uid]
-        while hits and hits[0] <= window_start:
-            hits.popleft()
-        if len(hits) >= self.per_minute:
-            raise TooMany(retry_after=max(1, int(60 - (now - hits[0]))))
-        hits.append(now)
+        with self._lock:
+            hits = self._hits[uid]
+            while hits and hits[0] <= window_start:
+                hits.popleft()
+            if len(hits) >= self.per_minute:
+                raise TooMany(retry_after=max(1, int(60 - (now - hits[0]))))
+            hits.append(now)
 
     def forget(self, uid: str) -> None:
-        self._hits.pop(uid, None)
+        with self._lock:
+            self._hits.pop(uid, None)
 
 
 _limiter = RateLimiter()

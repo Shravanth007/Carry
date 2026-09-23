@@ -55,9 +55,14 @@ def current_user(
 
     Runs on every protected endpoint, in this order:
       1. the token is real, so the uid can be trusted,
-      2. the account exists here (created on first sight),
-      3. it isn't blocked,
-      4. it is within its rate limit.
+      2. the account is within its rate limit,
+      3. the account exists here (created on first sight),
+      4. it isn't blocked.
+
+    The limit is checked before the database is touched: a flood costs one
+    dictionary lookup, not a connection from a pool of five and a write. Both
+    a blocked account and an unknown one still pay nothing while flooding,
+    because they are turned away at step 2.
 
     None of these can be skipped by a modified app: it is all server side.
     """
@@ -65,6 +70,15 @@ def current_user(
     if not uid:
         # A verified token always carries one; a token that doesn't is not ours.
         raise _unauthorized("Invalid sign-in token.")
+
+    try:
+        rate.check(uid)
+    except TooMany as e:
+        raise HTTPException(
+            429,
+            "Too many requests. Slow down and try again shortly.",
+            headers={"Retry-After": str(e.retry_after)},
+        ) from None
 
     try:
         user = users.seen(uid, claims.get("email"))
@@ -75,15 +89,6 @@ def current_user(
     if user.blocked:
         log.warning("blocked account tried to call: %s", uid)
         raise HTTPException(403, "This account can't use Carry.")
-
-    try:
-        rate.check(uid)
-    except TooMany as e:
-        raise HTTPException(
-            429,
-            "Too many requests. Slow down and try again shortly.",
-            headers={"Retry-After": str(e.retry_after)},
-        ) from None
 
     return user
 

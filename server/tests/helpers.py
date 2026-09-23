@@ -34,8 +34,10 @@ class TestUsers:
         self.rows: dict[str, CarryUser] = {}
         self.blocked: set[str] = set()
         self.fail_with: Exception | None = None
+        self.calls = 0
 
     def seen(self, uid: str, email: str | None) -> CarryUser:
+        self.calls += 1
         if self.fail_with is not None:
             raise self.fail_with
         existing = self.rows.get(uid)

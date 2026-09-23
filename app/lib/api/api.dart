@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -33,7 +34,10 @@ abstract final class Api {
     defaultValue: 'http://10.0.2.2:8000',
   );
 
-  static const _timeout = Duration(seconds: 20);
+  /// How long a whole call may take: connecting, the headers and the body.
+  /// Tests shorten it so they don't have to wait one out.
+  @visibleForTesting
+  static Duration timeout = const Duration(seconds: 20);
 
   /// Tests put their own client here.
   @visibleForTesting
@@ -44,7 +48,7 @@ abstract final class Api {
     try {
       final response = await client
           .get(Uri.parse('$baseUrl/health'))
-          .timeout(_timeout);
+          .timeout(timeout);
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Health check failed: $e');
@@ -71,7 +75,7 @@ abstract final class Api {
     if (response.statusCode == 401) {
       response = await _once(method, path, body: body, freshToken: true);
     }
-    return _read(response);
+    return _body(response);
   }
 
   static Future<http.Response> _once(
@@ -91,22 +95,61 @@ abstract final class Api {
       request.body = jsonEncode(body);
     }
     try {
-      final streamed = await client.send(request).timeout(_timeout);
-      return await http.Response.fromStream(streamed);
+      // One deadline for the whole call. The headers arriving doesn't mean the
+      // body will: a server can send them and then stall, so the body gets
+      // whatever time is left rather than no limit at all.
+      final deadline = DateTime.now().add(timeout);
+      final streamed = await client.send(request).timeout(timeout);
+      return await _read(streamed, deadline.difference(DateTime.now()));
     } on ApiFailure {
       rethrow;
     } catch (e) {
       debugPrint('$method $path failed: $e');
-      throw ApiFailure(
-        e is SocketException || e is http.ClientException
-            ? 'No internet connection. Connect and try again.'
-            : "Carry couldn't reach its server. Try again.",
-      );
+      throw ApiFailure(switch (e) {
+        SocketException() || http.ClientException() =>
+          'No internet connection. Connect and try again.',
+        TimeoutException() => 'That took too long. Try again.',
+        _ => "Carry couldn't reach its server. Try again.",
+      });
     }
   }
 
+  /// Collects the body within [left].
+  ///
+  /// `http.Response.fromStream` has no deadline of its own, so this reads the
+  /// stream directly and cancels it when the time runs out, which closes the
+  /// socket instead of leaving it reading forever.
+  static Future<http.Response> _read(
+    http.StreamedResponse streamed,
+    Duration left,
+  ) async {
+    final bytes = <int>[];
+    final finished = Completer<void>();
+    final body = streamed.stream.listen(
+      bytes.addAll,
+      onDone: finished.complete,
+      onError: finished.completeError,
+      cancelOnError: true,
+    );
+    try {
+      await finished.future.timeout(left.isNegative ? Duration.zero : left);
+    } catch (_) {
+      await body.cancel();
+      rethrow;
+    }
+    return http.Response.bytes(
+      bytes,
+      streamed.statusCode,
+      request: streamed.request,
+      headers: streamed.headers,
+      isRedirect: streamed.isRedirect,
+      persistentConnection: streamed.persistentConnection,
+      reasonPhrase: streamed.reasonPhrase,
+    );
+  }
+
   /// Turns a response into a body, or a sentence worth showing.
-  static Map<String, dynamic> _read(http.Response response) {
+  static Map<String, dynamic> _body(http.Response response) {
     final status = response.statusCode;
     if (status >= 200 && status < 300) {
       if (response.body.isEmpty) return const {};

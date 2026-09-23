@@ -30,9 +30,14 @@ def list_recordings(user: CurrentUser):
 |---|---|---|
 | 1 | A real, unexpired Firebase token for **this** project | `401` |
 | 2 | The token carries a uid | `401` |
-| 3 | The account exists here, created on first sight | `503` if the database is missing |
-| 4 | The account isn't blocked | `403` |
-| 5 | The account is inside its rate limit | `429` + `Retry-After` |
+| 3 | The account is inside its rate limit | `429` + `Retry-After` |
+| 4 | The account exists here, created on first sight | `503` if the database is missing |
+| 5 | The account isn't blocked | `403` |
+
+**The order matters.** The limit is checked before the database is touched, so
+a flood costs one dictionary lookup rather than a connection from a pool of
+five and a write to `last_seen_at`. A limiter that only runs after the work it
+is meant to prevent protects nothing.
 
 `/health` is the only open endpoint: uptime checks call it often and it says
 nothing about anyone.
@@ -57,6 +62,11 @@ Set in `app/core/config.py`, overridable by environment variable.
 **Rate limiting is per process today.** It counts in memory, so two server
 instances would allow two windows. That's marked with a `ponytail:` comment
 and moves to Postgres or Redis when there is more than one instance.
+
+Counting and allowing happen under a lock. FastAPI runs a `def` dependency in
+a worker thread, so requests for one account really do arrive at the same
+moment; without the lock each of them sees room before any records its hit,
+and they all get through.
 
 ## Blocking an account
 

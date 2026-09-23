@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:carry/api/api.dart';
 import 'package:carry/auth/auth.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
@@ -33,6 +35,7 @@ void main() {
   tearDown(() {
     Auth.firebaseForTesting = null;
     Api.client = http.Client();
+    Api.timeout = const Duration(seconds: 20);
   });
 
   /// Answers every request with [answers] in turn, recording what arrived.
@@ -153,6 +156,32 @@ void main() {
       serverAnswers([http.Response('not json', 200)]);
 
       await expectLater(Api.me(), throwsA(isA<ApiFailure>()));
+    },
+  );
+
+  test(
+    'a server that stalls after the headers does not hang the call',
+    () async {
+      Api.timeout = const Duration(milliseconds: 50);
+      // Headers arrive, then nothing: the body never comes and never closes.
+      final stalled = StreamController<List<int>>();
+      addTearDown(stalled.close);
+      Api.client = MockClient.streaming(
+        (_, _) async => http.StreamedResponse(stalled.stream, 200),
+      );
+
+      await expectLater(
+        Api.me(),
+        throwsA(
+          isA<ApiFailure>().having(
+            (e) => e.message,
+            'message',
+            contains('took too long'),
+          ),
+        ),
+      );
+      // The reader let go of the stream rather than holding the socket open.
+      expect(stalled.hasListener, isFalse);
     },
   );
 

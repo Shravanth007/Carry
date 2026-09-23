@@ -1,5 +1,7 @@
 """The limits a modified app cannot get around, because they live here."""
 
+import threading
+
 from app.core import config
 from app.services.rate_limit import RateLimiter, TooMany
 from tests.helpers import bearer
@@ -43,6 +45,33 @@ class TestRateLimit:
             pass
 
         limiter.check("user-1", now=61)  # the first two have aged out
+
+    def test_a_refused_request_never_reaches_the_database(self, client, rate, users):
+        """The point of the limit: a flood costs a lookup, not a connection."""
+        rate.per_minute = 1
+        client.get("/me", headers=bearer())
+        after_the_allowed_one = users.calls
+
+        for _ in range(20):
+            assert client.get("/me", headers=bearer()).status_code == 429
+
+        assert users.calls == after_the_allowed_one
+
+    def test_counting_and_allowing_happen_as_one_step(self):
+        """FastAPI runs this dependency in threads. Without the lock, several
+        requests for one account each see room before any records its hit, and
+        they all get through. Holding the lock proves `check` waits for it."""
+        limiter = RateLimiter(per_minute=1)
+        counted = threading.Event()
+        limiter._lock.acquire()  # noqa: SLF001 - this test is about the lock
+        caller = threading.Thread(target=lambda: (limiter.check("user-1"), counted.set()))
+        caller.start()
+
+        assert not counted.wait(0.1), "check counted a hit without taking the lock"
+
+        limiter._lock.release()  # noqa: SLF001
+        caller.join(timeout=1)
+        assert counted.is_set()
 
     def test_health_is_not_rate_limited(self, client, rate):
         """It has no account to count against, and uptime checks hit it often."""
