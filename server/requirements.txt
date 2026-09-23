@@ -1,3 +1,5 @@
 fastapi[standard]==0.141.1
 firebase-admin==7.5.0
 python-dotenv==1.2.3
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
