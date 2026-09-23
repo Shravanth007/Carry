@@ -1,13 +1,16 @@
 import 'dart:io';
 
 import 'package:carry/notes/notes.dart';
+import 'package:carry/permissions/permissions.dart';
 import 'package:carry/recording/recorder.dart';
+import 'package:carry/recording/recording.dart';
 import 'package:carry/recording/recording_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/pump.dart';
 import '../helpers/test_auth.dart';
+import '../helpers/test_device.dart';
 import '../helpers/test_recorder.dart';
 
 void main() {
@@ -17,6 +20,7 @@ void main() {
 
   setUp(() async {
     microphone = setUpTestRecorder();
+    setUpTestPermissions(status: MicPermission.granted);
     await setUpTestAuth(signedIn: true);
     Notes.clear();
     finishedWith = null;
@@ -26,7 +30,7 @@ void main() {
   /// Starts a recording and shows the bar, then lets it run for [seconds].
   Future<void> showBar(WidgetTester tester, {int seconds = 3}) async {
     Recorder.clockForTesting = () => tester.binding.clock.now();
-    await Recorder.start();
+    await Recording.begin();
     await pumpScreen(
       tester,
       Scaffold(

@@ -76,16 +76,39 @@ launches, and Carry keeps no copy of the account.
 
 ### Calling the server
 
+**`lib/api/api.dart` is the only place in the app that makes an HTTP call.**
+Nothing else imports `http`. Screens and services call a method on `Api`:
+
 ```dart
-final token = await Auth.idToken();
-// headers: {'Authorization': 'Bearer $token'}
+final me = await Api.me();
 ```
 
-- **Refreshing:** the Firebase SDK caches the token and refreshes it before the
-  1-hour expiry, so call `Auth.idToken()` before each request. Don't store the
-  token yourself.
-- **After a `401`:** call `Auth.idToken(forceRefresh: true)` and retry
-  **once**. If the retry is also `401`, sign the user out.
+Adding an endpoint means adding one method there, not a client somewhere new:
+
+```dart
+static Future<Note> upload(...) async {
+  final body = await _send('POST', '/recordings', body: {...});
+  return Note.fromJson(body);
+}
+```
+
+That one place owns, so that no caller has to remember any of it:
+
+| It handles | How |
+|---|---|
+| The base URL | `--dart-define=CARRY_API=...`, defaulting to `10.0.2.2:8000` for the emulator |
+| The token | `Authorization: Bearer <Auth.idToken()>` on every call. Signed out, the call never leaves the phone |
+| An expired token | A `401` is retried **once** with `forceRefresh: true`. A second `401` gives up rather than looping |
+| Timeouts | 20 seconds |
+| Errors | Anything not 2xx becomes an `ApiFailure` whose `message` is ready to show |
+
+`ApiFailure.message` prefers the server's own `detail`, because the server
+writes those for people ("Too many requests. Try again in 30 seconds."), and
+falls back to a sentence per status code. `status` is there for the rare
+caller that needs to branch on it.
+
+The Firebase SDK caches the token and refreshes it before the 1-hour expiry,
+which is why `Api` asks for it per request and never stores one.
 
 ### What the user sees
 

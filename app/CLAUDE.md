@@ -67,7 +67,12 @@ compiles against SDK 37, which the Android SDK currently publishes only as
 
 ### Architecture
 - Each feature exposes one entry point, and the rest of the app goes through
-  it. For auth that's the `Auth` class. See the doc.
+  it: `Auth` for sign-in, `Recording` for the microphone, `Api` for the
+  server. See their docs.
+- **Only `lib/api/api.dart` talks to the backend.** Nothing else imports
+  `http` or knows the base URL. A new endpoint is a new method on `Api`.
+  The one exception is `AvatarCache`, which downloads a Google profile
+  picture: another host, no Carry token.
 - Features don't reach into each other.
 - Screens take plain values, not Firebase objects, so they can be previewed
   and tested.

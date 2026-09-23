@@ -10,6 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// wasted work and leaves the account card blank when offline. It's a
 /// thumbnail, so it's small enough to sit in the phone's key-value storage
 /// next to the other small flags.
+///
+/// This is the one HTTP call outside `api/`: the URL comes from Google, it
+/// carries no Carry token, and nothing about it belongs in the API client.
 abstract final class AvatarCache {
   static const _bytesKey = 'avatar_bytes';
   static const _urlKey = 'avatar_url';

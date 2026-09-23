@@ -226,6 +226,9 @@ abstract final class Recorder {
     _state = RecorderState.idle;
   }
 
+  /// Drops a file the caller decided not to keep, after it was finished.
+  static void deleteFile(String path) => _delete(path);
+
   static void _delete(String path) {
     try {
       final file = File(path);

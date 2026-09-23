@@ -52,11 +52,13 @@ abstract final class Notes {
     required String path,
     required Duration duration,
     required int bytes,
+    String? ownerUid,
   }) {
     final now = DateTime.now();
     final note = Note(
       id: '${now.microsecondsSinceEpoch}',
-      ownerUid: owner,
+      // Whoever started the recording, not whoever happens to be here now.
+      ownerUid: ownerUid ?? owner,
       title: _recordedAt(now),
       path: path,
       addedAt: now,
