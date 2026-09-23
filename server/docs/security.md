@@ -56,8 +56,17 @@ Set in `app/core/config.py`, overridable by environment variable.
 | Limit | Default | Why the app can't own it |
 |---|---|---|
 | `RATE_LIMIT_PER_MINUTE` | 60 per account | A modified client has no rate limiter |
-| `MAX_BODY_BYTES` | 1 MB | Audio goes straight to S3; nothing here needs a big body. Without this, one request can exhaust memory |
+| `MAX_BODY_BYTES` | 1 MB | Audio goes straight to S3; nothing here needs a big body. Without this, one request can exhaust memory. Checked twice: `Content-Length` before anything is read, then the bytes actually arriving, because a chunked request declares no length at all |
 | `DB_MAX_CONNECTIONS` | 5 | Neon's free tier has a modest budget; runaway connections take the service down |
+
+Accounts that go quiet are swept from the limiter, so it doesn't keep one
+entry per account for the life of the process.
+
+**The server starts even when the database doesn't answer.** Neon suspends an
+idle branch, so a blip during a deploy would otherwise be a crash loop with
+nothing serving — not even `/health`, which is how you'd find out. The tables
+are created on the first request that gets through, and until then anything
+needing the database answers `503`.
 
 **Rate limiting is per process today.** It counts in memory, so two server
 instances would allow two windows. That's marked with a `ponytail:` comment

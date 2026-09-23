@@ -162,7 +162,15 @@ class _AuthGateState extends State<AuthGate> {
       final signedOut = user == null;
       if (signedOut != _wasSignedOut) {
         _wasSignedOut = signedOut;
-        if (signedOut) Analytics.screen('sign_in');
+        if (signedOut) {
+          // However the session ended — signed out here, revoked by Firebase,
+          // the account deleted — this is the moment the app stops being that
+          // person, so analytics stops being them too. One place owns it, so
+          // an expired session can't leave events attributed to whoever was
+          // here last.
+          Analytics.reset();
+          Analytics.screen('sign_in');
+        }
       }
       if (user != null || !mounted) return;
       final navigator = Navigator.maybeOf(context);

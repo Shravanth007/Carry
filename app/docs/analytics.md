@@ -124,7 +124,10 @@ Two places this bites:
 
 - Screen views for `sign_in` come from `AuthGate`'s auth subscription when the
   state **changes** to signed out — a rebuild of the gate doesn't add an
-  arrival.
+  arrival. That transition is also where `Analytics.reset()` lives, so a
+  session Firebase ends by itself (a revoked token, a deleted account) drops
+  the identity too. `signOutAndForget` only sends `signed_out`, before the
+  sign-out, while that is still the account being counted.
 - `recording_discarded` is only sent when a recording was actually running, and
   `recording_paused` only when the pause took effect, because the recorder
   ignores an answer that arrives after the recording has moved on.
@@ -151,11 +154,12 @@ the screen itself: `AuthGate` (`sign_in`), `OnboardingGate` (`welcome`,
 | A token, a key, a URL from the server | Obvious, and error logging is how these leak |
 | An exact byte count or note count | Use `Analytics.sizeBucket` and `countBucket`. An exact size next to a timestamp identifies a recording |
 
-**The `extension` property is bounded on purpose.** The text after the last dot
-is only an extension by convention: in `appointment.v1-Dr-Rao` it is part of
-someone's name. `audio_import.dart` sends it only when it is a plain short word
-(`^[a-z0-9]{1,5}$`) and sends `other` otherwise, so a file name can't ride in
-through a property that looks harmless.
+**The `extension` property comes from a fixed list.** The text after the last
+dot is only an extension by convention: in `appointment.Rao` it is part of
+someone's name, and `Rao` is short enough to pass any length check. So
+`audio_import.dart` reports a type only when it is one of `audioExtensions` or
+one of a fixed list of other known types (`mp4`, `pdf`, `jpg`, …), and `other`
+for everything else. Nothing read from a file name can leave the phone.
 
 The person is identified by their Firebase uid — the same key the server uses —
 and nothing else. `created_at` and `is_new_account` are set once.

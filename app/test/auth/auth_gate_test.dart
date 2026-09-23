@@ -36,6 +36,23 @@ void main() {
     expect(events.screens.where((s) => s == 'sign_in'), hasLength(1));
   });
 
+  testWidgets('a session ending on its own drops the analytics identity', (
+    tester,
+  ) async {
+    final events = setUpTestAnalytics();
+    final testAuth = await setUpTestAuth(signedIn: true);
+    await pumpScreen(tester, gate);
+    await tester.pump();
+
+    // Nobody tapped sign out: Firebase ended the session itself, as it does
+    // when a token is revoked or the account is deleted. Events after this
+    // must not still be attributed to that account.
+    await testAuth.firebase.signOut();
+    await tester.pump();
+
+    expect(events.resets, 1);
+  });
+
   testWidgets('shows the signed-in screen when signed in', (tester) async {
     await setUpTestAuth(signedIn: true);
     await pumpScreen(tester, gate);

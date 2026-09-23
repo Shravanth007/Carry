@@ -4,17 +4,24 @@ import '../analytics/analytics.dart';
 import '../limits.dart';
 import 'notes.dart';
 
-/// What may be reported about a file's type: a few letters or digits and
-/// nothing else.
+/// File types other than audio that are worth knowing people tried.
 ///
-/// The part after the last dot is only an extension by convention. In
-/// "appointment.v1-Dr-Rao" it is part of someone's name, and that must not
-/// reach analytics, so anything that isn't a plain short word is reported as
-/// `other`.
-final _plainExtension = RegExp(r'^[a-z0-9]{1,5}$');
+/// Needed because the part after the last dot is only an extension by
+/// convention: in "appointment.Rao" it is part of someone's name. Bounding it
+/// by length was not enough — a short name passes a length check. So a type is
+/// reported only if it is one of these or one of [audioExtensions], and
+/// anything else is `other`. Nothing read from a file name can leave the phone.
+const _otherKnownTypes = {
+  'mp4', 'mov', 'mkv', 'avi', 'webm', '3gp', // video: the common mistake
+  'pdf', 'txt', 'doc', 'docx', 'csv', 'json', 'xml',
+  'jpg', 'jpeg', 'png', 'heic', 'gif', 'webp',
+  'zip', 'rar', '7z', 'mid', 'midi',
+};
 
 String _reportable(String extension) =>
-    _plainExtension.hasMatch(extension) ? extension : 'other';
+    audioExtensions.contains(extension) || _otherKnownTypes.contains(extension)
+    ? extension
+    : 'other';
 
 /// Audio the transcriber can handle.
 const audioExtensions = {

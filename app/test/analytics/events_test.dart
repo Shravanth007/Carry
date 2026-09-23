@@ -70,13 +70,15 @@ void main() {
       });
     });
 
-    test('signing out is counted as this account, then forgotten', () async {
+    test('signing out is counted before the account goes', () async {
       await setUpTestAuth(signedIn: true);
 
       await signOutAndForget();
 
+      // The event belongs to the person leaving, so it is sent while they are
+      // still the person being counted. Dropping the identity is AuthGate's
+      // job, because a session can also end without anyone tapping anything.
       expect(events.has('signed_out'), isTrue);
-      expect(events.resets, 1);
     });
   });
 
@@ -199,6 +201,31 @@ void main() {
         );
       },
     );
+
+    test('a short name is still not an extension', () async {
+      final picker = setUpTestFilePicker();
+      // Bounding the length was not enough: "Rao" is three characters.
+      picker.pick = testFile('appointment.Rao', bytes: 10);
+
+      await importAudio();
+
+      expect(events.only('import_rejected').properties, {
+        'reason': 'wrong_type',
+        'extension': 'other',
+      });
+    });
+
+    test('a video file is worth knowing about, and safe to name', () async {
+      final picker = setUpTestFilePicker();
+      picker.pick = testFile('standup.mp4', bytes: 10);
+
+      await importAudio();
+
+      expect(events.only('import_rejected').properties, {
+        'reason': 'wrong_type',
+        'extension': 'mp4',
+      });
+    });
 
     test('a name pretending to be an extension is reported as other', () async {
       final picker = setUpTestFilePicker();

@@ -2,7 +2,15 @@
 
 import threading
 
+from fastapi import Request
+from fastapi.responses import PlainTextResponse
+from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.routing import Route
+
 from app.core import config
+from app.middleware.body_size import BodySizeLimit
+from app.services import db
 from app.services.rate_limit import RateLimiter, TooMany
 from tests.helpers import bearer
 
@@ -57,6 +65,20 @@ class TestRateLimit:
 
         assert users.calls == after_the_allowed_one
 
+    def test_accounts_that_went_quiet_are_forgotten(self):
+        """Otherwise the map keeps one entry per account for the life of the
+        process, which is a leak with a very slow fuse."""
+        limiter = RateLimiter(per_minute=1000)
+        for i in range(600):
+            limiter.check(f"user-{i}", now=0)
+
+        # Long after their window: the next sweep should drop them.
+        for _ in range(600):
+            limiter.check("someone-here-now", now=1000)
+
+        assert "user-1" not in limiter._hits  # noqa: SLF001 - that is the point
+        assert "someone-here-now" in limiter._hits  # noqa: SLF001
+
     def test_counting_and_allowing_happen_as_one_step(self):
         """FastAPI runs this dependency in threads. Without the lock, several
         requests for one account each see room before any records its hit, and
@@ -79,6 +101,21 @@ class TestRateLimit:
 
         for _ in range(5):
             assert client.get("/health").status_code == 200
+
+
+class TestStartUp:
+    def test_a_database_that_is_down_does_not_stop_the_server(self, monkeypatch):
+        """A deploy during a Neon blip must not be a crash loop with nothing
+        serving - not even /health, which is how you would find out."""
+        monkeypatch.setattr(
+            config, "DATABASE_URL", "postgresql://nobody@127.0.0.1:1/nothing"
+        )
+        monkeypatch.setattr(config, "DB_TIMEOUT_SECONDS", 1)
+        db.stop()
+
+        db.start()  # must not raise
+
+        db.stop()
 
 
 class TestBodySize:
@@ -109,3 +146,47 @@ class TestBodySize:
 
     def test_an_ordinary_request_passes(self, client):
         assert client.get("/me", headers=bearer()).status_code == 200
+
+
+class TestBodySizeWhenSomethingReadsIt:
+    """The cap counts bytes, not promises.
+
+    Carry has no endpoint that takes a body yet, and the router answers 405
+    before reading one, so these go through the middleware with a small app of
+    their own. That is exactly the shape the upload endpoint will have.
+    """
+
+    @staticmethod
+    def _client(max_bytes: int) -> TestClient:
+        async def echo(request: Request):
+            body = await request.body()
+            return PlainTextResponse(str(len(body)))
+
+        app = Starlette(routes=[Route("/echo", echo, methods=["POST"])])
+        app.add_middleware(BodySizeLimit, max_bytes=max_bytes)
+        return TestClient(app)
+
+    def test_a_chunked_body_over_the_cap_is_refused(self):
+        """Chunked means no Content-Length, so the header check sees nothing.
+        Trusting it alone makes the limit whatever the client admits to."""
+        client = self._client(max_bytes=1000)
+
+        res = client.post("/echo", content=iter([b"x" * 400] * 5))
+
+        assert res.status_code == 413
+        assert res.json() == {"detail": "That request is too large."}
+
+    def test_a_chunked_body_under_the_cap_arrives_whole(self):
+        client = self._client(max_bytes=1000)
+
+        res = client.post("/echo", content=iter([b"x" * 100] * 5))
+
+        assert res.status_code == 200
+        assert res.text == "500"
+
+    def test_a_declared_length_over_the_cap_never_reaches_the_route(self):
+        client = self._client(max_bytes=1000)
+
+        res = client.post("/echo", content=b"x" * 1001)
+
+        assert res.status_code == 413
