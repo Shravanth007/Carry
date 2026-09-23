@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../analytics/analytics.dart';
 import '../auth/auth.dart';
 
 /// Whether recordings are copied to Carry cloud, and from when.
@@ -59,6 +60,9 @@ abstract final class Backup {
       await _prefs.remove(_sinceKey(uid));
     }
     await _prefs.setBool(_onKey(uid), on);
+    // Sent from here, not from the switch: this is the line that decides the
+    // setting changed, and any other caller must count too.
+    Analytics.event('backup_toggled', {'on': on});
   }
 
   /// Whether a recording made at [addedAt] should be uploaded.

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
+import '../helpers/test_analytics.dart';
 import '../helpers/test_auth.dart';
 import '../helpers/test_device.dart';
 
@@ -30,6 +31,21 @@ void main() {
     setUpTestPrefs();
     await setUpTestAuth(signedIn: true);
   });
+
+  test(
+    'turning it on or off is counted, by the place that stores it',
+    () async {
+      final events = setUpTestAnalytics();
+
+      await Backup.setOn(true);
+      await Backup.setOn(false);
+
+      expect(events.named('backup_toggled').map((e) => e.properties['on']), [
+        true,
+        false,
+      ]);
+    },
+  );
 
   test('is off until somebody turns it on', () async {
     expect(await Backup.isOn(), isFalse);

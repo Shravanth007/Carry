@@ -62,7 +62,6 @@ class _BackupScreenState extends State<BackupScreen> {
     });
     try {
       await Backup.setOn(on);
-      Analytics.event('backup_toggled', {'on': on});
     } finally {
       // What's stored wins, even if the write failed: the switch must never
       // sit there showing an answer nothing was saved for.

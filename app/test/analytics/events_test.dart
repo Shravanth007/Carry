@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:carry/analytics/analytics.dart';
 import 'package:carry/api/api.dart';
 import 'package:carry/auth/auth.dart';
@@ -139,6 +141,30 @@ void main() {
       });
     });
 
+    testWidgets('tearing down with nothing running counts no discard', (
+      tester,
+    ) async {
+      // abandon() runs whenever the bar goes away, recording or not.
+      await Recording.abandon();
+
+      expect(events.has('recording_discarded'), isFalse);
+    });
+
+    testWidgets('a pause the recorder ignored is not counted', (tester) async {
+      Recorder.clockForTesting = () => tester.binding.clock.now();
+      await Recording.begin();
+      await tester.pump(const Duration(seconds: 3));
+      // The recording ends while a pause is still in flight, so the recorder
+      // drops the answer: nothing paused, so nothing is counted.
+      microphone.pauseGate = Completer<void>();
+      final pausing = Recording.pauseOrResume();
+      await Recording.finish();
+      microphone.pauseGate!.complete();
+      await pausing;
+
+      expect(events.has('recording_paused'), isFalse);
+    });
+
     testWidgets('a recording lost to an account change is counted', (
       tester,
     ) async {
@@ -173,6 +199,20 @@ void main() {
         );
       },
     );
+
+    test('a name pretending to be an extension is reported as other', () async {
+      final picker = setUpTestFilePicker();
+      // The part after the last dot is only an extension by convention. Here
+      // it is somebody's name, and it must not leave the phone.
+      picker.pick = testFile('appointment.v1-Dr-Rao', bytes: 10);
+
+      await importAudio();
+
+      expect(events.only('import_rejected').properties, {
+        'reason': 'wrong_type',
+        'extension': 'other',
+      });
+    });
 
     test('a file over the cap is counted as too large', () async {
       final picker = setUpTestFilePicker();

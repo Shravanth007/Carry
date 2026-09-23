@@ -66,22 +66,28 @@ abstract final class Api {
   }
 
   /// Who the server thinks you are. Proves sign-in works end to end.
-  static Future<ServerUser> me() async =>
-      _parse(await _send('GET', '/me'), ServerUser.fromJson, '/me');
+  static Future<ServerUser> me() async {
+    final answer = await _send('GET', '/me');
+    return _parse(answer, ServerUser.fromJson, '/me');
+  }
 
   /// Builds a value out of a body, turning a shape we didn't expect into an
   /// [ApiFailure] like any other. Without this a field the server renamed
   /// would throw a raw cast error at whatever screen made the call.
   static T _parse<T>(
-    Map<String, dynamic> body,
+    ({Map<String, dynamic> body, String? requestId}) answer,
     T Function(Map<String, dynamic>) build,
     String path,
   ) {
     try {
-      return build(body);
+      return build(answer.body);
     } catch (e) {
       debugPrint("Couldn't read the server's answer: $e");
-      Analytics.event('api_failed', {'endpoint': path, 'kind': 'wrong_shape'});
+      Analytics.event('api_failed', {
+        'endpoint': path,
+        'kind': 'wrong_shape',
+        'request_id': answer.requestId,
+      });
       throw const ApiFailure("Carry couldn't read the server's answer.");
     }
   }
@@ -90,7 +96,9 @@ abstract final class Api {
   ///
   /// A `401` gets one retry with a freshly minted token, because a token
   /// expires an hour after it was issued and the person shouldn't notice.
-  static Future<Map<String, dynamic>> _send(
+  /// The body, and the id the server logged it under, which any failure
+  /// after this point still needs.
+  static Future<({Map<String, dynamic> body, String? requestId})> _send(
     String method,
     String path, {
     Map<String, dynamic>? body,
@@ -100,7 +108,10 @@ abstract final class Api {
       Analytics.event('api_token_refreshed', {'endpoint': path});
       response = await _once(method, path, body: body, freshToken: true);
     }
-    return _body(response, path);
+    return (
+      body: _body(response, path),
+      requestId: response.headers['x-request-id'],
+    );
   }
 
   static Future<http.Response> _once(

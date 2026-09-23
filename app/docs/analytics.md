@@ -99,7 +99,7 @@ start), and push notification capture (there is no push).
 
 | Event | Properties |
 |---|---|
-| `backup_toggled` | `on` |
+| `backup_toggled` | `on` — sent by `Backup.setOn`, the line that stores it, not by the switch |
 | `soon_tapped` | `feature`: `mcp` / `google_drive` — a tap on something unbuilt is someone asking for it |
 
 **The server** — `api/api.dart`
@@ -116,6 +116,21 @@ start), and push notification capture (there is no push).
 **`request_id` is the useful one.** Every request carries an `X-Request-ID`
 header, the server logs it and sends it back, so an event in PostHog points at
 one line in the server's log. "It didn't work" becomes one search.
+
+## Counted once, not once per rebuild
+
+An event must fire when something happens, not while something is being drawn.
+Two places this bites:
+
+- Screen views for `sign_in` come from `AuthGate`'s auth subscription when the
+  state **changes** to signed out — a rebuild of the gate doesn't add an
+  arrival.
+- `recording_discarded` is only sent when a recording was actually running, and
+  `recording_paused` only when the pause took effect, because the recorder
+  ignores an answer that arrives after the recording has moved on.
+
+`TestAnalytics.only(name)` fails when an event was sent twice, which is the
+cheapest guard against this.
 
 ## Screens
 
@@ -135,6 +150,12 @@ the screen itself: `AuthGate` (`sign_in`), `OnboardingGate` (`welcome`,
 | The text of an exception | It can carry a path or a URL. Send a code |
 | A token, a key, a URL from the server | Obvious, and error logging is how these leak |
 | An exact byte count or note count | Use `Analytics.sizeBucket` and `countBucket`. An exact size next to a timestamp identifies a recording |
+
+**The `extension` property is bounded on purpose.** The text after the last dot
+is only an extension by convention: in `appointment.v1-Dr-Rao` it is part of
+someone's name. `audio_import.dart` sends it only when it is a plain short word
+(`^[a-z0-9]{1,5}$`) and sends `other` otherwise, so a file name can't ride in
+through a property that looks harmless.
 
 The person is identified by their Firebase uid — the same key the server uses —
 and nothing else. `created_at` and `is_new_account` are set once.
