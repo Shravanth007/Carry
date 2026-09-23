@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../analytics/analytics.dart';
+
 import 'sign_in_screen.dart';
 
 /// Every auth call in the app goes through here.
@@ -45,17 +47,72 @@ abstract final class Auth {
 
   /// Returns null when the user closes the Google account picker.
   static Future<UserCredential?> signInWithGoogle() async {
+    Analytics.event('sign_in_started');
     try {
       final account = await _google.authenticate();
       final credential = GoogleAuthProvider.credential(
         idToken: account.authentication.idToken,
       );
-      return await _firebase.signInWithCredential(credential);
+      final signedIn = await _firebase.signInWithCredential(credential);
+      _recordSignIn(signedIn);
+      return signedIn;
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        // Closing the picker isn't a failure. It's still worth counting: a
+        // screen people back out of is a screen worth looking at.
+        Analytics.event('sign_in_cancelled');
+        return null;
+      }
+      Analytics.event('sign_in_failed', {'reason': failureCode(e)});
+      rethrow;
+    } catch (e) {
+      // Firebase can refuse a credential Google was happy with.
+      Analytics.event('sign_in_failed', {'reason': failureCode(e)});
       rethrow;
     }
   }
+
+  /// True only for an account signing in for the first time ever.
+  ///
+  /// Firebase stamps both times from its own clock when it creates an account,
+  /// so they match until that account signs in a second time — including after
+  /// a reinstall or on a new phone. Unknown times count as existing, so a
+  /// returning account is never treated as new.
+  static bool isNewAccount(User user) {
+    final created = user.metadata.creationTime;
+    final lastSignIn = user.metadata.lastSignInTime;
+    if (created == null || lastSignIn == null) return false;
+    return lastSignIn.difference(created).abs() < const Duration(minutes: 1);
+  }
+
+  /// Counting a sign-in must never be the reason a sign-in fails, so anything
+  /// this touches is allowed to go wrong quietly.
+  static void _recordSignIn(UserCredential signedIn) {
+    bool? isNew;
+    try {
+      final user = signedIn.user;
+      if (user != null) {
+        isNew = isNewAccount(user);
+        Analytics.identify(
+          user.uid,
+          isNewAccount: isNew,
+          since: user.metadata.creationTime,
+        );
+      }
+    } catch (e) {
+      debugPrint("Couldn't read the account for analytics: $e");
+    }
+    Analytics.event('sign_in_succeeded', {'is_new_account': isNew});
+  }
+
+  /// A short code for why a sign-in failed, for events and logs. Never the
+  /// error's text: that can carry a path or a URL.
+  @visibleForTesting
+  static String failureCode(Object error) => switch (error) {
+    GoogleSignInException() => error.code.name,
+    FirebaseAuthException() => error.code,
+    _ => error.runtimeType.toString(),
+  };
 
   /// Firebase first, so the app flips to signed out immediately: that call is
   /// local and instant, while Google's can take a moment. Google follows, so
@@ -121,7 +178,13 @@ class _AuthGateState extends State<AuthGate> {
           return const Scaffold();
         }
         final user = snapshot.data;
-        return user == null ? const SignInScreen() : widget.signedIn(user);
+        if (user == null) {
+          // Counted here rather than in the screen's build, which runs again
+          // on every keystroke of a rebuild.
+          Analytics.screen('sign_in');
+          return const SignInScreen();
+        }
+        return widget.signedIn(user);
       },
     );
   }

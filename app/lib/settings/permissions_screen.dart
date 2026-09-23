@@ -44,7 +44,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     // Turning it on is the only change the app itself can make, and only
     // while the system will still show a prompt.
     if (wantOn && _mic == MicPermission.denied) {
-      final mic = await Permissions.requestMic();
+      final mic = await Permissions.requestMic(where: 'settings');
       if (mounted) setState(() => _mic = mic);
       if (mic != MicPermission.blocked) return;
       // Android only reports "never ask again" from a request, so this is the
@@ -83,7 +83,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     );
     if (go != true) return;
 
-    final opened = await Permissions.openSettings();
+    final opened = await Permissions.openSettings(where: 'settings');
     if (opened || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

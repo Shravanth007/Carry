@@ -26,7 +26,7 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
 
   Future<void> _allow() async {
     setState(() => _busy = true);
-    final mic = await Permissions.requestMic();
+    final mic = await Permissions.requestMic(where: 'onboarding');
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -79,7 +79,7 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
                 onPressed: _busy
                     ? null
                     : _blocked
-                    ? Permissions.openSettings
+                    ? () => Permissions.openSettings(where: 'onboarding')
                     : _allow,
                 style: carryButton,
                 child: _busy

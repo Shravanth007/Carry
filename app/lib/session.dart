@@ -1,3 +1,4 @@
+import 'analytics/analytics.dart';
 import 'auth/auth.dart';
 import 'notes/notes.dart';
 import 'settings/avatar_cache.dart';
@@ -10,6 +11,10 @@ import 'settings/avatar_cache.dart';
 /// them on a signed-out screen.
 Future<void> signOutAndForget() async {
   await Auth.signOut();
+  // Counted as this account, then forgotten, so the next person to sign in on
+  // this phone isn't counted as the last one.
+  Analytics.event('signed_out');
+  Analytics.reset();
   Notes.clear();
   await AvatarCache.clear();
   // The backup choice stays: it's this account's own setting, kept per

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
+import '../analytics/analytics.dart';
 import '../notes/audio_import.dart';
 import '../notes/notes.dart';
 import '../recording/recording.dart';
@@ -79,6 +80,19 @@ class _HomeScreenState extends State<HomeScreen> {
     if (message != null) _say(message);
   }
 
+  void _openSettings() {
+    Analytics.screen('settings');
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(
+          name: widget.name,
+          email: widget.email,
+          photoUrl: widget.photoUrl,
+        ),
+      ),
+    );
+  }
+
   void _say(String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
@@ -101,15 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
             iconSize: 30,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             tooltip: 'Settings',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => SettingsScreen(
-                  name: widget.name,
-                  email: widget.email,
-                  photoUrl: widget.photoUrl,
-                ),
-              ),
-            ),
+            onPressed: _openSettings,
           ),
         ],
       ),

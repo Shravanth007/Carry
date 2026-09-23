@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/pump.dart';
+import '../helpers/test_analytics.dart';
 import '../helpers/test_auth.dart';
 import '../helpers/test_device.dart';
 
@@ -98,14 +99,19 @@ void main() {
     expect(backupSwitch(tester).value, isTrue);
   });
 
-  testWidgets('Google Drive is announced, not offered', (tester) async {
+  testWidgets('Google Drive is announced, and says so when tapped', (
+    tester,
+  ) async {
+    final events = setUpTestAnalytics();
     await pumpBackup(tester);
 
     expect(find.text('Google Drive'), findsOneWidget);
     expect(find.byType(SoonBadge), findsOneWidget);
-    final drive = tester.widget<SettingsRow>(
-      find.widgetWithText(SettingsRow, 'Google Drive'),
-    );
-    expect(drive.onTap, isNull);
+
+    await tester.tap(find.text('Google Drive'));
+    await tester.pump();
+
+    expect(find.textContaining('is coming. Not yet.'), findsOneWidget);
+    expect(events.only('soon_tapped').properties, {'feature': 'google_drive'});
   });
 }
