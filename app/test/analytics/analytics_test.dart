@@ -3,6 +3,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_analytics.dart';
 
+/// An SDK having a bad day: every call throws where it is made.
+class _BrokenSink implements AnalyticsSink {
+  @override
+  void identify(String uid, Map<String, Object> onceOnly) =>
+      throw StateError('no');
+
+  @override
+  void reset() => throw StateError('no');
+
+  @override
+  void screen(String name) => throw StateError('no');
+
+  @override
+  void event(String name, Map<String, Object> properties) =>
+      throw StateError('no');
+}
+
 void main() {
   test('nothing is sent unless a test asks to collect', () {
     // The build that runs tests carries no POSTHOG_KEY, so the sink is silent
@@ -54,6 +71,18 @@ void main() {
     Analytics.identify('');
 
     expect(events.identified, isEmpty);
+  });
+
+  test('a sink that throws cannot break the work it was counting', () {
+    Analytics.sink = _BrokenSink();
+    addTearDown(() => Analytics.sink = Analytics.silentForTesting);
+
+    // None of these may throw: each one sits inside something real, like a
+    // sign-in or a save.
+    Analytics.event('recording_saved', {'seconds': 1});
+    Analytics.screen('home');
+    Analytics.identify('ada', isNewAccount: true);
+    Analytics.reset();
   });
 
   group('buckets', () {

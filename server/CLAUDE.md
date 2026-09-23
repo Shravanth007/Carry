@@ -98,6 +98,27 @@ checks** gate is green.
   - bad input (wrong type, too large, empty),
   - upstream failure (timeout or error).
 
+## Before raising a PR: review your own diff
+
+`pytest` passing is not a review. Tests written alongside the code share its
+assumptions. **Read `git diff main...HEAD` top to bottom before opening the
+PR**, and look for what a test can't see:
+
+1. **Check each change against the rules above** and against
+   [docs/security.md](docs/security.md). Breaking a rule from the same PR is the
+   easiest mistake to make.
+2. **Order of checks.** A cheap check after an expensive one protects nothing:
+   the limit goes before the database, not after it.
+3. **Anything shared between requests** — a module-level dict, a counter, a
+   pool. FastAPI runs a `def` dependency in a worker thread, so two requests
+   really are inside it at once.
+4. **Follow every value that leaves the process** — a response, a log line, an
+   event. A uid, a status and a request id are fine; a token, an email or an
+   exception's text are not.
+5. **Every error path has a status code you chose.** Anything that can raise
+   and isn't caught becomes a 500 that says nothing.
+6. **Then run it:** `pytest`, and read the failures.
+
 ## Planning
 
 For non-trivial work:

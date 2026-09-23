@@ -79,17 +79,19 @@ abstract final class Analytics {
   /// person's first day stays their first day.
   static void identify(String uid, {bool? isNewAccount, DateTime? since}) {
     if (uid.isEmpty) return;
-    sink.identify(uid, {
-      'is_new_account': ?isNewAccount,
-      'created_at': ?since?.toUtc().toIso8601String(),
-    });
+    _guard(
+      () => sink.identify(uid, {
+        'is_new_account': ?isNewAccount,
+        'created_at': ?since?.toUtc().toIso8601String(),
+      }),
+    );
   }
 
   /// Forgets who this was, so the next person to sign in on this phone is not
   /// counted as the last one.
-  static void reset() => sink.reset();
+  static void reset() => _guard(sink.reset);
 
-  static void screen(String name) => sink.screen(name);
+  static void screen(String name) => _guard(() => sink.screen(name));
 
   /// Nulls are dropped, so a call site can pass a value it might not have.
   static void event(String name, [Map<String, Object?> properties = const {}]) {
@@ -97,7 +99,21 @@ abstract final class Analytics {
     properties.forEach((key, value) {
       if (value != null) kept[key] = value;
     });
-    sink.event(name, kept);
+    _guard(() => sink.event(name, kept));
+  }
+
+  /// Counting something must never be what breaks it.
+  ///
+  /// Every call in the app sits inside a real piece of work — signing in,
+  /// saving a recording — and an SDK that isn't ready, or a platform channel
+  /// that throws on the spot, must not take that work down. Each send is also
+  /// fire and forget, so nothing waits on the network either.
+  static void _guard(void Function() call) {
+    try {
+      call();
+    } catch (e) {
+      debugPrint('Analytics call failed, carrying on without it: $e');
+    }
   }
 
   /// Sizes as buckets. An exact byte count of a file, next to a timestamp, is
