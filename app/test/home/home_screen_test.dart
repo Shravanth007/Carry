@@ -40,8 +40,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> tapImport(WidgetTester tester) async {
+  /// Taps import and waits for it to land.
+  ///
+  /// Importing copies the file, which is real disk I/O, and a widget test's
+  /// fake clock never runs that — so it gets turns of the real event loop
+  /// until the note appears. [expectNote] false means there is nothing to wait
+  /// for: a refused or cancelled import never reaches the copy.
+  Future<void> tapImport(WidgetTester tester, {bool expectNote = true}) async {
+    final before = Notes.all.value.length;
     await tester.tap(find.byTooltip('Import audio'));
+    await tester.runAsync(() async {
+      for (var turn = 0; expectNote && turn < 200; turn++) {
+        if (Notes.all.value.length > before) break;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
     await tester.pumpAndSettle();
   }
 
@@ -73,7 +86,7 @@ void main() {
     await pumpHome(tester);
     picker.pick = testFile('budget.pdf');
 
-    await tapImport(tester);
+    await tapImport(tester, expectNote: false);
 
     expect(
       find.text("That isn't an audio file. Pick a recording."),
@@ -86,7 +99,7 @@ void main() {
     await pumpHome(tester);
     picker.pick = null;
 
-    await tapImport(tester);
+    await tapImport(tester, expectNote: false);
 
     expect(picker.opens, 1);
     expect(find.byType(SnackBar), findsNothing);

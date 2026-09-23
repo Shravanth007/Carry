@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 
 from app.services import db, firebase_auth
@@ -45,11 +47,8 @@ def test_me_tells_an_expired_session_to_sign_in_again(client):
     assert res.json() == {"detail": "Session expired. Sign in again."}
 
 
-def test_two_first_requests_do_not_fight_over_starting_firebase(monkeypatch):
-    """`functools.cache` doesn't serialise its callers and FastAPI runs a `def`
-    dependency in a worker thread, so two first requests could both call
-    initialize_app. The loser used to get "already exists" - a ValueError that
-    reads exactly like a missing key, answering 503 to a signed-in person."""
+def test_firebase_takes_an_app_that_already_exists(monkeypatch):
+    """Starting twice raises "already exists", so an existing app is used."""
     started = object()
     monkeypatch.setattr(
         firebase_auth.firebase_admin,
@@ -65,6 +64,38 @@ def test_two_first_requests_do_not_fight_over_starting_firebase(monkeypatch):
         assert firebase_auth.firebase_app() is started
     finally:
         firebase_auth.firebase_app.cache_clear()
+
+
+def test_only_one_caller_starts_firebase_at_a_time(monkeypatch):
+    """Two first requests must not both call initialize_app.
+
+    `functools.cache` doesn't serialise its callers and FastAPI runs a `def`
+    dependency in a worker thread, so both could get inside. The loser gets
+    "the default Firebase app already exists" - a ValueError that reads exactly
+    like a missing key, answering 503 to a signed-in person. Holding the lock
+    proves the second caller waits for the first.
+    """
+    monkeypatch.setattr(
+        firebase_auth.firebase_admin, "get_app", lambda *a, **k: object()
+    )
+    firebase_auth.firebase_app.cache_clear()
+    got_in = threading.Event()
+
+    def call():
+        firebase_auth.firebase_app()
+        got_in.set()
+
+    firebase_auth._starting.acquire()  # noqa: SLF001 - this test is about the lock
+    caller = threading.Thread(target=call)
+    caller.start()
+    try:
+        assert not got_in.wait(0.1), "started Firebase without taking the lock"
+    finally:
+        firebase_auth._starting.release()  # noqa: SLF001
+        caller.join(timeout=2)
+        firebase_auth.firebase_app.cache_clear()
+
+    assert got_in.is_set()
 
 
 def test_me_is_503_when_google_keys_are_unreachable(client):

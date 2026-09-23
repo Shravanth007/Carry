@@ -46,6 +46,8 @@ void main() {
     expect(result.note, isNull);
     expect(result.error, "Carry couldn't save that recording. Try again.");
     expect(Notes.all.value, isEmpty);
+    // And nothing half-written was left behind: nothing sweeps this folder.
+    expect(imports.listSync(), isEmpty);
   });
 
   test('the original is left where it was', () async {

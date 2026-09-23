@@ -62,18 +62,23 @@ Future<Directory> _importFolder() async {
   return folder;
 }
 
-/// Copies the picked file in and returns where it landed.
+/// Where the copy will go. The name is ours, not the one from the phone, so
+/// nothing about a file name reaches the disk layout either.
+String _targetPath(Directory folder, String extension) =>
+    '${folder.path}${Platform.pathSeparator}'
+    '${DateTime.now().microsecondsSinceEpoch}.$extension';
+
+/// Removes a file we started writing and then couldn't finish.
 ///
-/// Sync on purpose, like the recorder: these are local files, and async file
-/// I/O doesn't complete inside a widget test's fake clock. The name is ours,
-/// not the one from the phone, so nothing about a file name reaches the disk
-/// layout either.
-String _copyIn(String source, Directory folder, String extension) {
-  final target =
-      '${folder.path}${Platform.pathSeparator}'
-      '${DateTime.now().microsecondsSinceEpoch}.$extension';
-  File(source).copySync(target);
-  return target;
+/// A copy that runs out of space leaves a partial file behind, and nothing
+/// deletes the imports folder for us.
+void _deletePartial(String path) {
+  try {
+    final file = File(path);
+    if (file.existsSync()) file.deleteSync();
+  } catch (e) {
+    debugPrint('Could not clean up $path: $e');
+  }
 }
 
 /// A finished import. Both fields are null when the user cancels.
@@ -145,11 +150,14 @@ Future<ImportResult> importAudio() async {
     );
   }
 
-  final String kept;
+  // Async on purpose: an import can be 25 MB, and copying that on the UI
+  // isolate would freeze the screen while it ran.
+  final kept = _targetPath(await _importFolder(), extension);
   try {
-    kept = _copyIn(file.path, await _importFolder(), extension);
+    await File(file.path).copy(kept);
   } catch (e) {
     debugPrint('Could not copy the imported file in: $e');
+    _deletePartial(kept);
     Analytics.event('import_rejected', {
       'reason': 'could_not_copy',
       'extension': _reportable(extension),
