@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+import psycopg
+
 from app.services import db
 
 
@@ -31,8 +33,17 @@ class PostgresUsers:
     """The real store. One statement: create if new, refresh if not."""
 
     def seen(self, uid: str, email: str | None) -> CarryUser:
+        try:
+            row = self._upsert(uid, email)
+        # Neon suspends an idle branch, and networks drop. A hiccup is a 503
+        # the app can retry, not a 500 that looks like a bug in Carry.
+        except psycopg.Error as e:
+            raise db.Unavailable(f"users.seen failed: {e}") from e
+        return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
+
+    def _upsert(self, uid: str, email: str | None) -> tuple:
         with db.connection() as conn:
-            row = conn.execute(
+            return conn.execute(
                 """
                 INSERT INTO users (uid, email)
                 VALUES (%s, %s)
@@ -45,7 +56,6 @@ class PostgresUsers:
                 """,
                 (uid, email),
             ).fetchone()
-        return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
 
 
 _store: UserStore = PostgresUsers()

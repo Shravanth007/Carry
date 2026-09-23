@@ -20,8 +20,9 @@ class RateLimiter:
     client against a public repo. This is the only place the limit is real.
 
     # ponytail: counted in this process's memory, so two server instances
-    # would allow two windows. Move the counting into Postgres or Redis when
-    # there is more than one instance.
+    # would allow two windows, and the map keeps one entry per account seen
+    # since start-up. Move the counting into Postgres or Redis when there is
+    # more than one instance.
     """
 
     def __init__(self, per_minute: int = config.RATE_LIMIT_PER_MINUTE):

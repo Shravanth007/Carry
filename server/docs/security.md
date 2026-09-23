@@ -31,7 +31,7 @@ def list_recordings(user: CurrentUser):
 | 1 | A real, unexpired Firebase token for **this** project | `401` |
 | 2 | The token carries a uid | `401` |
 | 3 | The account is inside its rate limit | `429` + `Retry-After` |
-| 4 | The account exists here, created on first sight | `503` if the database is missing |
+| 4 | The account exists here, created on first sight | `503` if the database is missing or down |
 | 5 | The account isn't blocked | `403` |
 
 **The order matters.** The limit is checked before the database is touched, so

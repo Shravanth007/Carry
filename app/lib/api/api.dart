@@ -57,9 +57,22 @@ abstract final class Api {
   }
 
   /// Who the server thinks you are. Proves sign-in works end to end.
-  static Future<ServerUser> me() async {
-    final body = await _send('GET', '/me');
-    return ServerUser.fromJson(body);
+  static Future<ServerUser> me() async =>
+      _parse(await _send('GET', '/me'), ServerUser.fromJson);
+
+  /// Builds a value out of a body, turning a shape we didn't expect into an
+  /// [ApiFailure] like any other. Without this a field the server renamed
+  /// would throw a raw cast error at whatever screen made the call.
+  static T _parse<T>(
+    Map<String, dynamic> body,
+    T Function(Map<String, dynamic>) build,
+  ) {
+    try {
+      return build(body);
+    } catch (e) {
+      debugPrint("Couldn't read the server's answer: $e");
+      throw const ApiFailure("Carry couldn't read the server's answer.");
+    }
   }
 
   /// Sends a request with the signed-in account's token.

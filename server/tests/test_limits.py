@@ -95,6 +95,8 @@ class TestBodySize:
 
         assert res.status_code == 413
         assert res.json() == {"detail": "That request is too large."}
+        # Being refused is still a request worth finding in the log.
+        assert "X-Request-ID" in res.headers
 
     def test_a_nonsense_length_is_refused(self, client):
         res = client.post(

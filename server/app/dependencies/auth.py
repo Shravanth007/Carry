@@ -85,6 +85,9 @@ def current_user(
     except db.NotConfigured as e:
         log.error("%s", e)
         raise HTTPException(503, "Carry isn't set up to store accounts yet.") from None
+    except db.Unavailable as e:
+        log.error("%s", e)
+        raise HTTPException(503, "Carry can't reach its records. Try again.") from None
 
     if user.blocked:
         log.warning("blocked account tried to call: %s", uid)

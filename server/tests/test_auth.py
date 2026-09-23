@@ -101,3 +101,12 @@ class TestTheAccountRecord:
 
         assert res.status_code == 503
         assert res.json() == {"detail": "Carry isn't set up to store accounts yet."}
+
+    def test_a_database_that_is_down_says_try_again(self, client, users):
+        """Neon suspends an idle branch, so this is a normal Tuesday, not a bug."""
+        users.fail_with = db.Unavailable("connection refused")
+
+        res = client.get("/me", headers=bearer())
+
+        assert res.status_code == 503
+        assert res.json() == {"detail": "Carry can't reach its records. Try again."}

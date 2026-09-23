@@ -14,6 +14,11 @@ class NotConfigured(Exception):
     """No database to talk to, so anything that needs one cannot run."""
 
 
+class Unavailable(Exception):
+    """There is a database, but it didn't answer. Different from NotConfigured:
+    this one is worth retrying, and the caller should be told to."""
+
+
 # Small on purpose: Neon's free tier has a modest connection budget, and the
 # pooled host does the real multiplexing.
 _SCHEMA = """

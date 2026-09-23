@@ -28,8 +28,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Carry", lifespan=lifespan)
-# Outermost first: refuse an oversized body before anything reads it.
-app.middleware("http")(request_context)
+# Starlette runs the LAST registered middleware outermost, so request_context
+# wraps everything: a refused request still gets an ID and an access log line,
+# which is exactly what you want when someone is probing. The body cap still
+# runs before the route, and nothing between the two reads the body.
 app.middleware("http")(body_size_limit)
+app.middleware("http")(request_context)
 app.include_router(health.router)
 app.include_router(users.router)

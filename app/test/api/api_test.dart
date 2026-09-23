@@ -150,14 +150,28 @@ void main() {
     );
   });
 
-  test(
-    'a body that is not the agreed shape is reported, not thrown raw',
-    () async {
-      serverAnswers([http.Response('not json', 200)]);
+  test('a body that is not JSON is reported, not thrown raw', () async {
+    serverAnswers([http.Response('not json', 200)]);
 
-      await expectLater(Api.me(), throwsA(isA<ApiFailure>()));
-    },
-  );
+    await expectLater(Api.me(), throwsA(isA<ApiFailure>()));
+  });
+
+  test('JSON of the wrong shape is reported, not thrown raw', () async {
+    // Valid JSON, but a field the app needs is gone: a renamed field on the
+    // server must not throw a cast error at the screen that called.
+    serverAnswers([http.Response('{"email":"ada@example.com"}', 200)]);
+
+    await expectLater(
+      Api.me(),
+      throwsA(
+        isA<ApiFailure>().having(
+          (e) => e.message,
+          'message',
+          contains("couldn't read"),
+        ),
+      ),
+    );
+  });
 
   test(
     'a server that stalls after the headers does not hang the call',
