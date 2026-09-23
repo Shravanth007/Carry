@@ -66,7 +66,9 @@ class _RecordingBarState extends State<RecordingBar> {
   }
 
   Future<void> _saveBeforeTheAppGoes() async {
-    if (Recording.inProgress && !_finishing) await _save();
+    if (Recording.inProgress && !_finishing) {
+      await _save(stoppedBy: 'app_backgrounded');
+    }
   }
 
   Future<void> _pauseOrResume() async {
@@ -78,12 +80,12 @@ class _RecordingBarState extends State<RecordingBar> {
 
   /// [andSay] is shown when the save worked but wasn't asked for, so the
   /// person isn't left wondering why the bar went away.
-  Future<void> _save({String? andSay}) async {
+  Future<void> _save({String? andSay, String stoppedBy = 'user'}) async {
     if (_finishing) return; // a second tap must not save twice
     setState(() => _finishing = true);
     _ticker?.cancel();
 
-    final result = await Recording.finish();
+    final result = await Recording.finish(stoppedBy: stoppedBy);
     if (!mounted) return;
     if (result.stillRecording) {
       // The phone wouldn't stop: put the controls back rather than leaving
@@ -136,6 +138,7 @@ class _RecordingBarState extends State<RecordingBar> {
       if (Recording.atLimit) {
         unawaited(
           _save(
+            stoppedBy: 'length_limit',
             andSay:
                 'That is as long as a recording can be, so '
                 'Carry saved it.',

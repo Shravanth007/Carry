@@ -1,5 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 
+import '../analytics/analytics.dart';
 import '../limits.dart';
 import 'notes.dart';
 
@@ -27,6 +28,7 @@ const _cancelled = (note: null, error: null);
 /// The file comes from outside the app, so its type and size are checked here
 /// rather than trusted: a file picker can hand back anything the user taps.
 Future<ImportResult> importAudio() async {
+  Analytics.event('import_opened');
   final file = await openFile(
     acceptedTypeGroups: [
       XTypeGroup(
@@ -42,7 +44,10 @@ Future<ImportResult> importAudio() async {
       ),
     ],
   );
-  if (file == null) return _cancelled;
+  if (file == null) {
+    Analytics.event('import_cancelled');
+    return _cancelled;
+  }
 
   // Some pickers hand back a whole path as the name, so take the last segment
   // ourselves rather than trusting it.
@@ -51,14 +56,30 @@ Future<ImportResult> importAudio() async {
       ? name.split('.').last.toLowerCase()
       : '';
   if (!audioExtensions.contains(extension)) {
+    // The extension, never the file name: "Chat with Dr Rao.m4a" is not ours
+    // to send anywhere.
+    Analytics.event('import_rejected', {
+      'reason': 'wrong_type',
+      'extension': extension,
+    });
     return (note: null, error: "That isn't an audio file. Pick a recording.");
   }
 
   final bytes = await file.length();
   if (bytes == 0) {
+    Analytics.event('import_rejected', {
+      'reason': 'empty',
+      'extension': extension,
+    });
     return (note: null, error: 'That file is empty. Pick another recording.');
   }
   if (bytes > Limits.uploadBytes) {
+    // How often this fires is how we find out whether the cap is wrong.
+    Analytics.event('import_rejected', {
+      'reason': 'too_large',
+      'extension': extension,
+      'size': Analytics.sizeBucket(bytes),
+    });
     return (
       note: null,
       error: 'That file is over ${Limits.uploadSize}. Pick a shorter one.',
@@ -75,5 +96,10 @@ Future<ImportResult> importAudio() async {
     bytes: bytes,
   );
   Notes.add(note);
+  Analytics.event('import_added', {
+    'extension': extension,
+    'size': Analytics.sizeBucket(bytes),
+    'notes_after': Analytics.countBucket(Notes.all.value.length),
+  });
   return (note: note, error: null);
 }

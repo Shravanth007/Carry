@@ -175,8 +175,11 @@ the extension list — the check above is what actually decides. See
 
   Google Drive sits under it as a "Soon" row, for people who would rather keep
   recordings in their own Drive.
-- **MCP:** a placeholder row, greyed out with a "Soon" badge and no tap. It
-  will let AI tools read your notes. Nothing behind it yet.
+- **MCP:** a placeholder row, greyed out with a "Soon" badge. It will let AI
+  tools read your notes; nothing is behind it yet. Tapping it says so rather
+  than doing nothing, and sends `soon_tapped` — so the count of taps is how we
+  find out whether to build it. Google Drive under Backup works the same way.
+  See [analytics.md](analytics.md).
 - **Sign out:** `signOutAndForget()` in `lib/session.dart`. It signs out of
   Firebase and Google, then drops the notes and the saved profile picture, so
   the next person to sign in on this phone sees nothing of the last one.

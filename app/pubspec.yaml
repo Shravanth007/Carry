@@ -46,6 +46,7 @@ dependencies:
   http: ^1.6.0
   record: ^7.1.1
   path_provider: ^2.1.6
+  posthog_flutter: ^5.46.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

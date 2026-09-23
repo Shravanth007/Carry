@@ -5,11 +5,11 @@ import 'package:carry/backup/backup_screen.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/settings/permissions_screen.dart';
 import 'package:carry/settings/settings_screen.dart';
-import 'package:carry/settings/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/pump.dart';
+import '../helpers/test_analytics.dart';
 import '../helpers/test_auth.dart';
 import '../helpers/test_device.dart';
 
@@ -95,17 +95,22 @@ void main() {
     expect(find.byType(BackupScreen), findsOneWidget);
   });
 
-  testWidgets('shows MCP as on the way, not as something to tap', (
+  testWidgets('shows MCP as on the way, and says so when tapped', (
     tester,
   ) async {
+    final events = setUpTestAnalytics();
     await pumpSettings(tester);
 
     expect(find.text('MCP'), findsOneWidget);
     expect(find.text('Soon'), findsOneWidget);
-    final mcpRow = tester.widget<SettingsRow>(
-      find.widgetWithText(SettingsRow, 'MCP'),
-    );
-    expect(mcpRow.onTap, isNull);
+
+    await tester.tap(find.text('MCP'));
+    await tester.pump();
+
+    expect(find.textContaining('is coming. Not yet.'), findsOneWidget);
+    // A tap on something unbuilt is the cheapest way to hear that people
+    // want it.
+    expect(events.only('soon_tapped').properties, {'feature': 'mcp'});
   });
 
   testWidgets('signs out of Firebase and Google', (tester) async {
