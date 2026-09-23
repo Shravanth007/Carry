@@ -8,4 +8,5 @@ router = APIRouter(tags=["users"])
 
 @router.get("/me", response_model=UserOut)
 def me(user: CurrentUser):
-    return UserOut(uid=user["uid"], email=user.get("email"))
+    """Who the server thinks you are. Handy for checking sign-in end to end."""
+    return UserOut(uid=user.uid, email=user.email, since=user.created_at)

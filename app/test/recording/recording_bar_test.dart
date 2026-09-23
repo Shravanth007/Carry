@@ -1,13 +1,17 @@
 import 'dart:io';
 
+import 'package:carry/limits.dart';
 import 'package:carry/notes/notes.dart';
+import 'package:carry/permissions/permissions.dart';
 import 'package:carry/recording/recorder.dart';
+import 'package:carry/recording/recording.dart';
 import 'package:carry/recording/recording_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/pump.dart';
 import '../helpers/test_auth.dart';
+import '../helpers/test_device.dart';
 import '../helpers/test_recorder.dart';
 
 void main() {
@@ -17,6 +21,7 @@ void main() {
 
   setUp(() async {
     microphone = setUpTestRecorder();
+    setUpTestPermissions(status: MicPermission.granted);
     await setUpTestAuth(signedIn: true);
     Notes.clear();
     finishedWith = null;
@@ -26,7 +31,7 @@ void main() {
   /// Starts a recording and shows the bar, then lets it run for [seconds].
   Future<void> showBar(WidgetTester tester, {int seconds = 3}) async {
     Recorder.clockForTesting = () => tester.binding.clock.now();
-    await Recorder.start();
+    await Recording.begin();
     await pumpScreen(
       tester,
       Scaffold(
@@ -40,6 +45,28 @@ void main() {
     );
     await tester.pump(Duration(seconds: seconds));
   }
+
+  group('the length cap', () {
+    testWidgets('keeps what was recorded instead of running past it', (
+      tester,
+    ) async {
+      await showBar(tester, seconds: Limits.recording.inSeconds);
+      await tester.pump(const Duration(milliseconds: 200)); // the next tick
+
+      expect(Notes.all.value, hasLength(1));
+      expect(finishedTimes, 1);
+      expect(finishedWith, contains('as long as a recording can be'));
+      expect(microphone.stops, 1);
+    });
+
+    testWidgets('leaves a shorter recording alone', (tester) async {
+      await showBar(tester, seconds: Limits.recording.inSeconds - 5);
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(Notes.all.value, isEmpty);
+      expect(finishedTimes, 0);
+    });
+  });
 
   testWidgets('counts the seconds up', (tester) async {
     await showBar(tester, seconds: 75);

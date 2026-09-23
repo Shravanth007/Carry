@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../auth/auth.dart';
+import '../limits.dart';
 import '../notes/notes.dart';
 import '../permissions/permissions.dart';
 import 'recorder.dart';
@@ -11,11 +13,21 @@ import 'recorder.dart';
 /// themselves, so there is one place that knows what recording means and one
 /// set of sentences for when it goes wrong.
 abstract final class Recording {
+  /// Who started the recording that is running. Captured at the start, not
+  /// at the end: a recording belongs to whoever spoke into it, and the
+  /// account can change while it runs.
+  static String? _startedBy;
+
   static bool get inProgress => Recorder.isRecording;
 
   static bool get isPaused => Recorder.isPaused;
 
   static Duration get elapsed => Recorder.elapsed;
+
+  /// True once a recording has run as long as one is allowed to. The bar
+  /// stops it and keeps what it has: a recording that grew past what can be
+  /// uploaded would be a recording nobody can transcribe.
+  static bool get atLimit => inProgress && elapsed >= Limits.recording;
 
   /// How loud it is now, 0 to 1. Silent while paused.
   static Future<double> level() async {
@@ -32,6 +44,13 @@ abstract final class Recording {
   ///
   /// Returns null when it started, or a sentence to show the user.
   static Future<String?> begin() async {
+    // Nothing is recorded without an account to own it. The server will check
+    // the same thing again from the token: this is only so the person is told
+    // now, rather than losing the recording later.
+    final uid = Auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      return 'Sign in to record.';
+    }
     var mic = await Permissions.micStatus();
     if (mic != MicPermission.granted) mic = await Permissions.requestMic();
     if (mic != MicPermission.granted) {
@@ -40,6 +59,7 @@ abstract final class Recording {
     }
     try {
       await Recorder.start();
+      _startedBy = uid;
       return null;
     } catch (e) {
       debugPrint('Could not start recording: $e');
@@ -81,13 +101,31 @@ abstract final class Recording {
         stillRecording: inProgress,
       );
     }
+    final owner = _startedBy;
+    _startedBy = null;
+
     if (finished == null) {
       return (
         message: 'Too short to save. Hold on a little longer.',
         stillRecording: false,
       );
     }
+
+    // The account changed while this was recording: signed out, or a
+    // different person signed in. Attaching it to whoever is here now would
+    // hand them someone else's words, so it goes no further.
+    if (owner == null || owner != Auth.currentUser?.uid) {
+      Recorder.deleteFile(finished.path);
+      return (
+        message:
+            "That recording wasn't saved: the account changed while it "
+            'was running.',
+        stillRecording: false,
+      );
+    }
+
     Notes.addRecorded(
+      ownerUid: owner,
       path: finished.path,
       duration: finished.duration,
       bytes: finished.bytes,
@@ -103,6 +141,7 @@ abstract final class Recording {
   static Future<void> abandon() => _stopAndDrop();
 
   static Future<void> _stopAndDrop() async {
+    _startedBy = null;
     try {
       await Recorder.discard();
     } catch (e) {

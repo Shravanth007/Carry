@@ -17,6 +17,7 @@ Flutter app lives in `../app` and has its own CLAUDE.md.
 | Working on... | Read |
 |---|---|
 | Auth: how tokens are checked, the service account key, error responses | [../app/docs/auth.md](../app/docs/auth.md) |
+| Trust model, limits, quotas, presigned uploads, secrets | [docs/security.md](docs/security.md) |
 
 ## Structure
 
@@ -64,7 +65,11 @@ checks** gate is green.
 ## Rules
 
 - **Auth:** every endpoint except `/health` takes `user: CurrentUser` and uses
-  `user["uid"]`. Never trust a user ID sent in the request body.
+  `user.uid`. Never trust a user ID sent in the request body, a header or a
+  path. The app is a public repo: anyone can write their own client, so every
+  limit is enforced here, never in Flutter. See [docs/security.md](docs/security.md).
+- **Quotas before creation:** check an account's allowance before creating a
+  row or signing an upload URL. A signed URL is storage already spent.
 - **Secrets:** the service account key and Groq keys are read from environment
   variables or `.env`. `.env` and `secrets/` are git-ignored, and secrets never
   go in code.

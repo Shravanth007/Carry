@@ -1,5 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 
+import '../limits.dart';
 import 'notes.dart';
 
 /// Audio the transcriber can handle.
@@ -14,9 +15,6 @@ const audioExtensions = {
   'amr',
   'wma',
 };
-
-/// Big enough for a long meeting, small enough to survive an upload.
-const maxImportBytes = 200 * 1024 * 1024;
 
 /// A finished import. Both fields are null when the user cancels.
 /// [error] is shown to the user as written.
@@ -60,8 +58,11 @@ Future<ImportResult> importAudio() async {
   if (bytes == 0) {
     return (note: null, error: 'That file is empty. Pick another recording.');
   }
-  if (bytes > maxImportBytes) {
-    return (note: null, error: 'That file is over 200 MB. Pick a shorter one.');
+  if (bytes > Limits.uploadBytes) {
+    return (
+      note: null,
+      error: 'That file is over ${Limits.uploadSize}. Pick a shorter one.',
+    );
   }
 
   final now = DateTime.now();
