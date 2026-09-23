@@ -83,9 +83,13 @@ abstract final class Recording {
       } else {
         await Recorder.pause();
       }
-      Analytics.event(wasPaused ? 'recording_resumed' : 'recording_paused', {
-        'at_seconds': elapsed.inSeconds,
-      });
+      // The recorder ignores an answer that arrives after the recording
+      // moved on, so report the state that actually changed, not the call.
+      if (isPaused != wasPaused) {
+        Analytics.event(isPaused ? 'recording_paused' : 'recording_resumed', {
+          'at_seconds': elapsed.inSeconds,
+        });
+      }
       return null;
     } catch (e) {
       debugPrint('Could not pause or resume: $e');
@@ -175,10 +179,14 @@ abstract final class Recording {
   static Future<void> abandon() => _stopAndDrop('abandoned');
 
   static Future<void> _stopAndDrop(String by) async {
-    Analytics.event('recording_discarded', {
-      'seconds': elapsed.inSeconds,
-      'by': by,
-    });
+    // Only count a discard when there was something to discard: this is also
+    // called on teardown, when there may be nothing running at all.
+    if (inProgress) {
+      Analytics.event('recording_discarded', {
+        'seconds': elapsed.inSeconds,
+        'by': by,
+      });
+    }
     _startedBy = null;
     try {
       await Recorder.discard();

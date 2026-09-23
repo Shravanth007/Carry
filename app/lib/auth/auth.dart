@@ -147,6 +147,10 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   StreamSubscription<User?>? _watch;
 
+  /// Null until the first answer arrives. Kept so the sign-in screen is
+  /// counted when someone arrives at it, not every time this rebuilds.
+  bool? _wasSignedOut;
+
   @override
   void initState() {
     super.initState();
@@ -155,6 +159,11 @@ class _AuthGateState extends State<AuthGate> {
     // close them here. Covers sign-out from anywhere, and a session that
     // ends on its own.
     _watch = Auth.userChanges.listen((user) {
+      final signedOut = user == null;
+      if (signedOut != _wasSignedOut) {
+        _wasSignedOut = signedOut;
+        if (signedOut) Analytics.screen('sign_in');
+      }
       if (user != null || !mounted) return;
       final navigator = Navigator.maybeOf(context);
       if (navigator != null && navigator.canPop()) {
@@ -178,13 +187,7 @@ class _AuthGateState extends State<AuthGate> {
           return const Scaffold();
         }
         final user = snapshot.data;
-        if (user == null) {
-          // Counted here rather than in the screen's build, which runs again
-          // on every keystroke of a rebuild.
-          Analytics.screen('sign_in');
-          return const SignInScreen();
-        }
-        return widget.signedIn(user);
+        return user == null ? const SignInScreen() : widget.signedIn(user);
       },
     );
   }

@@ -4,6 +4,18 @@ import '../analytics/analytics.dart';
 import '../limits.dart';
 import 'notes.dart';
 
+/// What may be reported about a file's type: a few letters or digits and
+/// nothing else.
+///
+/// The part after the last dot is only an extension by convention. In
+/// "appointment.v1-Dr-Rao" it is part of someone's name, and that must not
+/// reach analytics, so anything that isn't a plain short word is reported as
+/// `other`.
+final _plainExtension = RegExp(r'^[a-z0-9]{1,5}$');
+
+String _reportable(String extension) =>
+    _plainExtension.hasMatch(extension) ? extension : 'other';
+
 /// Audio the transcriber can handle.
 const audioExtensions = {
   'm4a',
@@ -60,7 +72,7 @@ Future<ImportResult> importAudio() async {
     // to send anywhere.
     Analytics.event('import_rejected', {
       'reason': 'wrong_type',
-      'extension': extension,
+      'extension': _reportable(extension),
     });
     return (note: null, error: "That isn't an audio file. Pick a recording.");
   }
@@ -69,7 +81,7 @@ Future<ImportResult> importAudio() async {
   if (bytes == 0) {
     Analytics.event('import_rejected', {
       'reason': 'empty',
-      'extension': extension,
+      'extension': _reportable(extension),
     });
     return (note: null, error: 'That file is empty. Pick another recording.');
   }
@@ -77,7 +89,7 @@ Future<ImportResult> importAudio() async {
     // How often this fires is how we find out whether the cap is wrong.
     Analytics.event('import_rejected', {
       'reason': 'too_large',
-      'extension': extension,
+      'extension': _reportable(extension),
       'size': Analytics.sizeBucket(bytes),
     });
     return (
@@ -97,7 +109,7 @@ Future<ImportResult> importAudio() async {
   );
   Notes.add(note);
   Analytics.event('import_added', {
-    'extension': extension,
+    'extension': _reportable(extension),
     'size': Analytics.sizeBucket(bytes),
     'notes_after': Analytics.countBucket(Notes.all.value.length),
   });

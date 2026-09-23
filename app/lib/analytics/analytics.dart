@@ -65,7 +65,9 @@ abstract final class Analytics {
         ..preloadFeatureFlags = false
         ..capturePushNotificationSubscriptions = false
         ..capturePushNotificationOpened = false;
-      await Posthog().setup(config);
+      // main() awaits this, so it gets a deadline: a platform channel that
+      // never answers must not be what keeps the app off the screen.
+      await Posthog().setup(config).timeout(const Duration(seconds: 3));
       sink = const _PostHog();
     } catch (e) {
       // A dead analytics SDK must not take the app down with it.
