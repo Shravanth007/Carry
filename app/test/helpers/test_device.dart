@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -51,6 +52,10 @@ class TestPermissions extends PermissionHandlerPlatform {
   /// What the user picks in the system prompt. Defaults to allowing.
   PermissionStatus answer = PermissionStatus.granted;
 
+  /// Holds the system prompt open, so a test can take the screen away while
+  /// it is still up.
+  Completer<void>? prompt;
+
   int prompts = 0;
   int settingsOpened = 0;
 
@@ -63,6 +68,7 @@ class TestPermissions extends PermissionHandlerPlatform {
     List<Permission> permissions,
   ) async {
     prompts++;
+    await prompt?.future; // a system prompt the test decides when to close
     _status = answer;
     return {for (final permission in permissions) permission: answer};
   }

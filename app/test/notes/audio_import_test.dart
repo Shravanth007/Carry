@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:carry/limits.dart';
 import 'package:carry/notes/audio_import.dart';
 import 'package:carry/notes/notes.dart';
@@ -9,8 +11,11 @@ import '../helpers/test_files.dart';
 void main() {
   late TestFilePicker picker;
 
+  late Directory imports;
+
   setUp(() {
     picker = setUpTestFilePicker();
+    imports = setUpTestImportFolder();
     Notes.clear();
   });
 
@@ -21,8 +26,35 @@ void main() {
 
     expect(result.error, isNull);
     expect(result.note?.title, 'Team standup');
-    expect(result.note?.path, '/phone/Team standup.m4a');
+    // Kept in the app's own storage, not left in the picker's cache copy,
+    // which the phone is free to delete.
+    final kept = result.note!.path;
+    expect(kept, startsWith(imports.path));
+    expect(File(kept).existsSync(), isTrue);
+    expect(kept, endsWith('.m4a'));
     expect(Notes.all.value.single.title, 'Team standup');
+  });
+
+  test('a file that cannot be copied in is refused, not half-added', () async {
+    picker.pick = testFile('Gone.m4a');
+    // The picker's copy is deleted before the import reads it, which is what a
+    // cache the phone just cleared looks like.
+    File(picker.pick!.path).deleteSync();
+
+    final result = await importAudio();
+
+    expect(result.note, isNull);
+    expect(result.error, "Carry couldn't save that recording. Try again.");
+    expect(Notes.all.value, isEmpty);
+  });
+
+  test('the original is left where it was', () async {
+    picker.pick = testFile('Keep me.m4a');
+    final source = picker.pick!.path;
+
+    await importAudio();
+
+    expect(File(source).existsSync(), isTrue);
   });
 
   test('cancelling adds nothing and says nothing', () async {

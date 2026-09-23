@@ -1,6 +1,6 @@
 import pytest
 
-from app.services import db
+from app.services import db, firebase_auth
 from tests.helpers import TEST_EMAIL, TEST_UID, bearer
 
 
@@ -43,6 +43,28 @@ def test_me_tells_an_expired_session_to_sign_in_again(client):
 
     assert res.status_code == 401
     assert res.json() == {"detail": "Session expired. Sign in again."}
+
+
+def test_two_first_requests_do_not_fight_over_starting_firebase(monkeypatch):
+    """`functools.cache` doesn't serialise its callers and FastAPI runs a `def`
+    dependency in a worker thread, so two first requests could both call
+    initialize_app. The loser used to get "already exists" - a ValueError that
+    reads exactly like a missing key, answering 503 to a signed-in person."""
+    started = object()
+    monkeypatch.setattr(
+        firebase_auth.firebase_admin,
+        "initialize_app",
+        lambda *a, **k: (_ for _ in ()).throw(ValueError("already exists")),
+    )
+    monkeypatch.setattr(
+        firebase_auth.firebase_admin, "get_app", lambda *a, **k: started
+    )
+    firebase_auth.firebase_app.cache_clear()
+
+    try:
+        assert firebase_auth.firebase_app() is started
+    finally:
+        firebase_auth.firebase_app.cache_clear()
 
 
 def test_me_is_503_when_google_keys_are_unreachable(client):

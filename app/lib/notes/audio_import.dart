@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../analytics/analytics.dart';
 import '../limits.dart';
@@ -35,6 +39,42 @@ const audioExtensions = {
   'amr',
   'wma',
 };
+
+/// Where imported audio is kept, and tests point this at a temporary folder.
+@visibleForTesting
+Future<Directory> Function()? importFolderForTesting;
+
+/// The app's own folder for imported audio.
+///
+/// It has to be the app's own storage. What the picker hands back on Android is
+/// a copy in the cache directory (`{cacheDir}/{uuid}/{name}` — see
+/// `file_selector_android`), and the system clears that whenever it wants
+/// space, as does "Clear cache" in the phone's settings. A note pointing there
+/// is a note whose audio can disappear.
+Future<Directory> _importFolder() async {
+  final folder = importFolderForTesting != null
+      ? await importFolderForTesting!()
+      : Directory(
+          '${(await getApplicationDocumentsDirectory()).path}'
+          '${Platform.pathSeparator}imports',
+        );
+  if (!folder.existsSync()) folder.createSync(recursive: true);
+  return folder;
+}
+
+/// Copies the picked file in and returns where it landed.
+///
+/// Sync on purpose, like the recorder: these are local files, and async file
+/// I/O doesn't complete inside a widget test's fake clock. The name is ours,
+/// not the one from the phone, so nothing about a file name reaches the disk
+/// layout either.
+String _copyIn(String source, Directory folder, String extension) {
+  final target =
+      '${folder.path}${Platform.pathSeparator}'
+      '${DateTime.now().microsecondsSinceEpoch}.$extension';
+  File(source).copySync(target);
+  return target;
+}
 
 /// A finished import. Both fields are null when the user cancels.
 /// [error] is shown to the user as written.
@@ -105,12 +145,27 @@ Future<ImportResult> importAudio() async {
     );
   }
 
+  final String kept;
+  try {
+    kept = _copyIn(file.path, await _importFolder(), extension);
+  } catch (e) {
+    debugPrint('Could not copy the imported file in: $e');
+    Analytics.event('import_rejected', {
+      'reason': 'could_not_copy',
+      'extension': _reportable(extension),
+    });
+    return (
+      note: null,
+      error: "Carry couldn't save that recording. Try again.",
+    );
+  }
+
   final now = DateTime.now();
   final note = Note(
     id: '${now.microsecondsSinceEpoch}',
     ownerUid: Notes.owner,
     title: name.substring(0, name.length - extension.length - 1),
-    path: file.path,
+    path: kept,
     addedAt: now,
     bytes: bytes,
   );

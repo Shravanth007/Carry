@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/settings/permissions_screen.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,25 @@ void main() {
   }
 
   Switch micSwitch(WidgetTester tester) => tester.widget(find.byType(Switch));
+
+  testWidgets('a session ending while the prompt is up breaks nothing', (
+    tester,
+  ) async {
+    // Signing out closes every pushed screen, so the prompt can come back to a
+    // screen that no longer exists. Asking a dead screen for a dialog throws.
+    final permissions = setUpTestPermissions();
+    permissions.answer = PermissionStatus.permanentlyDenied;
+    permissions.prompt = Completer<void>();
+    await pumpPermissions(tester);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox()); // the screen goes away
+    permissions.prompt!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
 
   Future<void> flip(WidgetTester tester) async {
     await tester.tap(find.byType(Switch));

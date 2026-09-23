@@ -25,6 +25,7 @@ void main() {
     setUpTestPrefs();
     setUpTestAvatarDownloads();
     picker = setUpTestFilePicker();
+    setUpTestImportFolder();
     // Every test in here, so a tap on Record can never reach the real
     // microphone and leave the recorder running into the next test.
     setUpTestRecorder();

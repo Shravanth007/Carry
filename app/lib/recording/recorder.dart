@@ -46,8 +46,6 @@ abstract interface class RecorderBackend {
 
   /// How loud it is right now, 0 (silence) to 1 (loud).
   Future<double> level();
-
-  Future<void> dispose();
 }
 
 /// Every recording call in the app goes through here.
@@ -80,7 +78,17 @@ abstract final class Recorder {
   @visibleForTesting
   static DateTime Function()? clockForTesting;
 
-  static DateTime get _now => clockForTesting?.call() ?? DateTime.now();
+  /// A clock that only goes forwards.
+  ///
+  /// The wall clock can jump: a phone syncing with the network, or somebody
+  /// changing the time, would make a recording's duration wrong and could trip
+  /// the length cap early. Durations come from a stopwatch instead, read as a
+  /// time so the rest of the code is unchanged.
+  static final Stopwatch _ticks = Stopwatch()..start();
+  static final DateTime _startedAt = DateTime.now();
+
+  static DateTime get _now =>
+      clockForTesting?.call() ?? _startedAt.add(_ticks.elapsed);
 
   static RecorderBackend get _current =>
       backendForTesting ?? (_backend ??= _DeviceRecorder());
@@ -268,7 +276,4 @@ class _DeviceRecorder implements RecorderBackend {
     final current = amplitude.current.clamp(floor, 0.0);
     return (current - floor) / -floor;
   }
-
-  @override
-  Future<void> dispose() => _recorder.dispose();
 }
