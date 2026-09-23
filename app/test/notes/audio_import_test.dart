@@ -50,6 +50,21 @@ void main() {
     expect(imports.listSync(), isEmpty);
   });
 
+  test('storage that will not give us a folder is a refusal too', () async {
+    picker.pick = testFile('Standup.m4a');
+    // No space, or storage the phone won't hand over. The person gets the same
+    // sentence; they must not get an error nobody caught.
+    importFolderForTesting = () async =>
+        throw const FileSystemException('no space left on device');
+    addTearDown(() => importFolderForTesting = null);
+
+    final result = await importAudio();
+
+    expect(result.note, isNull);
+    expect(result.error, "Carry couldn't save that recording. Try again.");
+    expect(Notes.all.value, isEmpty);
+  });
+
   test('the original is left where it was', () async {
     picker.pick = testFile('Keep me.m4a');
     final source = picker.pick!.path;

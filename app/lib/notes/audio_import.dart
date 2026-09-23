@@ -152,12 +152,17 @@ Future<ImportResult> importAudio() async {
 
   // Async on purpose: an import can be 25 MB, and copying that on the UI
   // isolate would freeze the screen while it ran.
-  final kept = _targetPath(await _importFolder(), extension);
+  //
+  // Finding the folder is inside the try with the copy: making it can fail too
+  // - no space, or storage the phone won't give us - and that has to be the
+  // same refusal, not an error nobody catches.
+  String? kept;
   try {
+    kept = _targetPath(await _importFolder(), extension);
     await File(file.path).copy(kept);
   } catch (e) {
     debugPrint('Could not copy the imported file in: $e');
-    _deletePartial(kept);
+    if (kept != null) _deletePartial(kept);
     Analytics.event('import_rejected', {
       'reason': 'could_not_copy',
       'extension': _reportable(extension),
