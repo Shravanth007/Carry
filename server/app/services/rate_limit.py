@@ -4,6 +4,9 @@ from collections import defaultdict, deque
 
 from app.core import config
 
+# How many checks between sweeps of accounts that have gone quiet.
+_SWEEP_EVERY = 500
+
 
 class TooMany(Exception):
     """Over the limit. Carries how long to wait, for Retry-After."""
@@ -20,9 +23,8 @@ class RateLimiter:
     client against a public repo. This is the only place the limit is real.
 
     # ponytail: counted in this process's memory, so two server instances
-    # would allow two windows, and the map keeps one entry per account seen
-    # since start-up. Move the counting into Postgres or Redis when there is
-    # more than one instance.
+    # would allow two windows. Move the counting into Postgres or Redis when
+    # there is more than one instance.
     """
 
     def __init__(self, per_minute: int = config.RATE_LIMIT_PER_MINUTE):
@@ -36,6 +38,7 @@ class RateLimiter:
         # microseconds; give each uid its own only if it ever shows up in a
         # profile.
         self._lock = threading.Lock()
+        self._checks = 0
 
     def check(self, uid: str, now: float | None = None) -> None:
         """Raises TooMany when this account is over its limit."""
@@ -48,6 +51,28 @@ class RateLimiter:
             if len(hits) >= self.per_minute:
                 raise TooMany(retry_after=max(1, int(60 - (now - hits[0]))))
             hits.append(now)
+            self._forget_idle(window_start)
+
+    def _forget_idle(self, window_start: float) -> None:
+        """Drops accounts with nothing left inside the window.
+
+        Without this the map keeps one entry for every account ever seen, so an
+        account that called once a month ago still costs memory for as long as
+        the process lives. Swept in batches, not on every call: the sweep walks
+        every account and the lock is held while it does.
+
+        Caller holds the lock.
+        """
+        self._checks += 1
+        if self._checks % _SWEEP_EVERY:
+            return
+        idle = [
+            uid
+            for uid, hits in self._hits.items()
+            if not hits or hits[-1] <= window_start
+        ]
+        for uid in idle:
+            del self._hits[uid]
 
     def forget(self, uid: str) -> None:
         with self._lock:

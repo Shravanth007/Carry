@@ -1,7 +1,27 @@
 import 'package:file_selector/file_selector.dart';
 
+import '../analytics/analytics.dart';
 import '../limits.dart';
 import 'notes.dart';
+
+/// File types other than audio that are worth knowing people tried.
+///
+/// Needed because the part after the last dot is only an extension by
+/// convention: in "appointment.Rao" it is part of someone's name. Bounding it
+/// by length was not enough — a short name passes a length check. So a type is
+/// reported only if it is one of these or one of [audioExtensions], and
+/// anything else is `other`. Nothing read from a file name can leave the phone.
+const _otherKnownTypes = {
+  'mp4', 'mov', 'mkv', 'avi', 'webm', '3gp', // video: the common mistake
+  'pdf', 'txt', 'doc', 'docx', 'csv', 'json', 'xml',
+  'jpg', 'jpeg', 'png', 'heic', 'gif', 'webp',
+  'zip', 'rar', '7z', 'mid', 'midi',
+};
+
+String _reportable(String extension) =>
+    audioExtensions.contains(extension) || _otherKnownTypes.contains(extension)
+    ? extension
+    : 'other';
 
 /// Audio the transcriber can handle.
 const audioExtensions = {
@@ -27,6 +47,7 @@ const _cancelled = (note: null, error: null);
 /// The file comes from outside the app, so its type and size are checked here
 /// rather than trusted: a file picker can hand back anything the user taps.
 Future<ImportResult> importAudio() async {
+  Analytics.event('import_opened');
   final file = await openFile(
     acceptedTypeGroups: [
       XTypeGroup(
@@ -42,7 +63,10 @@ Future<ImportResult> importAudio() async {
       ),
     ],
   );
-  if (file == null) return _cancelled;
+  if (file == null) {
+    Analytics.event('import_cancelled');
+    return _cancelled;
+  }
 
   // Some pickers hand back a whole path as the name, so take the last segment
   // ourselves rather than trusting it.
@@ -51,14 +75,30 @@ Future<ImportResult> importAudio() async {
       ? name.split('.').last.toLowerCase()
       : '';
   if (!audioExtensions.contains(extension)) {
+    // The extension, never the file name: "Chat with Dr Rao.m4a" is not ours
+    // to send anywhere.
+    Analytics.event('import_rejected', {
+      'reason': 'wrong_type',
+      'extension': _reportable(extension),
+    });
     return (note: null, error: "That isn't an audio file. Pick a recording.");
   }
 
   final bytes = await file.length();
   if (bytes == 0) {
+    Analytics.event('import_rejected', {
+      'reason': 'empty',
+      'extension': _reportable(extension),
+    });
     return (note: null, error: 'That file is empty. Pick another recording.');
   }
   if (bytes > Limits.uploadBytes) {
+    // How often this fires is how we find out whether the cap is wrong.
+    Analytics.event('import_rejected', {
+      'reason': 'too_large',
+      'extension': _reportable(extension),
+      'size': Analytics.sizeBucket(bytes),
+    });
     return (
       note: null,
       error: 'That file is over ${Limits.uploadSize}. Pick a shorter one.',
@@ -75,5 +115,10 @@ Future<ImportResult> importAudio() async {
     bytes: bytes,
   );
   Notes.add(note);
+  Analytics.event('import_added', {
+    'extension': _reportable(extension),
+    'size': Analytics.sizeBucket(bytes),
+    'notes_after': Analytics.countBucket(Notes.all.value.length),
+  });
   return (note: note, error: null);
 }

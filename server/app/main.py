@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core import config  # loads .env before anything else reads env vars
-from app.middleware.body_size import body_size_limit
+from app.middleware.body_size import BodySizeLimit
 from app.middleware.request_context import request_context
 from app.routes import health, users
 from app.services import db, firebase_auth
@@ -32,7 +32,7 @@ app = FastAPI(title="Carry", lifespan=lifespan)
 # wraps everything: a refused request still gets an ID and an access log line,
 # which is exactly what you want when someone is probing. The body cap still
 # runs before the route, and nothing between the two reads the body.
-app.middleware("http")(body_size_limit)
+app.add_middleware(BodySizeLimit)
 app.middleware("http")(request_context)
 app.include_router(health.router)
 app.include_router(users.router)

@@ -20,6 +20,7 @@ The backend lives in `../server` and has its own CLAUDE.md.
 | Welcome screen, new vs returning users, permissions | [docs/onboarding.md](docs/onboarding.md) |
 | Home screen, notes, importing audio, settings | [docs/notes.md](docs/notes.md) |
 | Building for iOS, signing, what differs from Android | [docs/ios.md](docs/ios.md) |
+| Events, what we send to PostHog and what we never send | [docs/analytics.md](docs/analytics.md) |
 
 Each feature gets its own doc in `docs/` explaining how it works. When you add
 a doc, add a row here. When you change how a feature works, update its doc.
@@ -77,10 +78,16 @@ compiles against SDK 37, which the Android SDK currently publishes only as
 - Numbers the server also enforces live in `lib/limits.dart`, never inline in
   a screen. The app's copy is there to answer quickly; the server's is the one
   that decides.
+- **Analytics go through `lib/analytics/analytics.dart`, and events are sent
+  from the feature facades, never from a widget.** A facade knows why something
+  happened; a `build` method doesn't, and it runs again on every rebuild. See
+  the doc for what must never be sent.
 - Screens take plain values, not Firebase objects, so they can be previewed
   and tested.
-- Before `runApp`, only initialize Firebase and `Auth`. Everything else runs
-  after the first frame.
+- Before `runApp`, only initialize Firebase, `Auth` and `Analytics` — the
+  third because the first screen someone sees should be counted, and it does
+  nothing at all in a build with no key. Everything else runs after the first
+  frame.
 
 ### UI
 - Colors come from `CarryColors`. Screens have no hex values, except the
@@ -108,13 +115,41 @@ compiles against SDK 37, which the Android SDK currently publishes only as
 
 Every change comes with tests, and `flutter test` must pass.
 
-- **Real services:** tests never use real Firebase, Google or the network. Use
-  the shared test setup in `test/helpers/`. The feature's doc explains how.
+- **Real services:** tests never use real Firebase, Google, PostHog or the
+  network. Use the shared test setup in `test/helpers/`. The feature's doc
+  explains how. Analytics is silent unless a test calls `setUpTestAnalytics()`.
 - **Screens:** render them with `pumpScreen(tester, screen)`, which uses a phone
   size. While a spinner is showing, use `pump()`, not `pumpAndSettle()`.
 - **What to cover in each flow:** success, the user cancelling, every error the
   user can see, the loading state, and retry.
 - **Test names** describe behavior, e.g. "closing the picker shows no error".
+
+## Before raising a PR: review your own diff
+
+`flutter analyze` and a green suite are not a review. Tests written alongside
+the code agree with the code's own assumptions, so they cannot catch an
+assumption that was wrong. **Read the whole diff before opening the PR**, as if
+someone else wrote it, and look for the things a test can't see:
+
+1. **Read `git diff main...HEAD` top to bottom.** Every hunk. If a hunk is hard
+   to explain out loud, that's the one with the bug in it.
+2. **Check each change against the rule it is supposed to follow** — the rules
+   in this file and in the feature's doc. Breaking a rule you wrote in the same
+   PR is the easiest mistake to make and the easiest to catch by re-reading.
+3. **Anything in a `build` method that isn't drawing.** A build runs again on
+   every rebuild: no side effects, no counting, no navigation, no writes.
+4. **Anything that can fire twice**, or fire when nothing happened: a teardown
+   path, a stream that re-emits, a call that was ignored further down.
+5. **Follow every value that leaves the app** — to the server, to analytics, to
+   a log — back to where it came from. If any of it is user text, a file name or
+   an exception message, it is a leak until proven otherwise.
+6. **New package?** Build the app, not just the tests. A plugin that breaks the
+   Android build passes every unit test first.
+7. **Then run it:** `dart format lib test`, `flutter analyze lib test`,
+   `flutter test`. Zero issues, and read the failures rather than re-running.
+
+Write the one-line reason for each finding into the PR body. If the review finds
+nothing, say so in the PR: that is a claim worth making explicitly.
 
 ## Planning
 

@@ -3,6 +3,7 @@ import 'package:carry/auth/sign_in_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../helpers/test_analytics.dart';
 import '../helpers/pump.dart';
 import '../helpers/test_auth.dart';
 
@@ -15,6 +16,41 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SignInScreen), findsOneWidget);
+  });
+
+  testWidgets('counts the sign-in screen once, however often it rebuilds', (
+    tester,
+  ) async {
+    final events = setUpTestAnalytics();
+    await setUpTestAuth();
+    await pumpScreen(tester, gate);
+    await tester.pump();
+
+    // Whatever makes this rebuild - a parent, a repeated auth snapshot - the
+    // funnel must not gain a second arrival at the same screen.
+    await tester.pumpWidget(const SizedBox());
+    await pumpScreen(tester, gate);
+    await tester.pump();
+    await tester.pump();
+
+    expect(events.screens.where((s) => s == 'sign_in'), hasLength(1));
+  });
+
+  testWidgets('a session ending on its own drops the analytics identity', (
+    tester,
+  ) async {
+    final events = setUpTestAnalytics();
+    final testAuth = await setUpTestAuth(signedIn: true);
+    await pumpScreen(tester, gate);
+    await tester.pump();
+
+    // Nobody tapped sign out: Firebase ended the session itself, as it does
+    // when a token is revoked or the account is deleted. Events after this
+    // must not still be attributed to that account.
+    await testAuth.firebase.signOut();
+    await tester.pump();
+
+    expect(events.resets, 1);
   });
 
   testWidgets('shows the signed-in screen when signed in', (tester) async {

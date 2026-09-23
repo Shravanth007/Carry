@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../analytics/analytics.dart';
 import '../auth/auth.dart';
 
 /// Something the server refused or couldn't do. [message] is written for the
@@ -43,6 +45,13 @@ abstract final class Api {
   @visibleForTesting
   static http.Client client = http.Client();
 
+  static final _random = Random();
+
+  /// Short, unique enough, and made only of characters the server accepts.
+  static String _newRequestId() =>
+      '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}'
+      '-${_random.nextInt(0xffffff).toRadixString(16)}';
+
   /// Is the server up? Needs no account.
   static Future<bool> health() async {
     try {
@@ -57,20 +66,28 @@ abstract final class Api {
   }
 
   /// Who the server thinks you are. Proves sign-in works end to end.
-  static Future<ServerUser> me() async =>
-      _parse(await _send('GET', '/me'), ServerUser.fromJson);
+  static Future<ServerUser> me() async {
+    final answer = await _send('GET', '/me');
+    return _parse(answer, ServerUser.fromJson, '/me');
+  }
 
   /// Builds a value out of a body, turning a shape we didn't expect into an
   /// [ApiFailure] like any other. Without this a field the server renamed
   /// would throw a raw cast error at whatever screen made the call.
   static T _parse<T>(
-    Map<String, dynamic> body,
+    ({Map<String, dynamic> body, String? requestId}) answer,
     T Function(Map<String, dynamic>) build,
+    String path,
   ) {
     try {
-      return build(body);
+      return build(answer.body);
     } catch (e) {
       debugPrint("Couldn't read the server's answer: $e");
+      Analytics.event('api_failed', {
+        'endpoint': path,
+        'kind': 'wrong_shape',
+        'request_id': answer.requestId,
+      });
       throw const ApiFailure("Carry couldn't read the server's answer.");
     }
   }
@@ -79,16 +96,22 @@ abstract final class Api {
   ///
   /// A `401` gets one retry with a freshly minted token, because a token
   /// expires an hour after it was issued and the person shouldn't notice.
-  static Future<Map<String, dynamic>> _send(
+  /// The body, and the id the server logged it under, which any failure
+  /// after this point still needs.
+  static Future<({Map<String, dynamic> body, String? requestId})> _send(
     String method,
     String path, {
     Map<String, dynamic>? body,
   }) async {
     var response = await _once(method, path, body: body, freshToken: false);
     if (response.statusCode == 401) {
+      Analytics.event('api_token_refreshed', {'endpoint': path});
       response = await _once(method, path, body: body, freshToken: true);
     }
-    return _body(response);
+    return (
+      body: _body(response, path),
+      requestId: response.headers['x-request-id'],
+    );
   }
 
   static Future<http.Response> _once(
@@ -99,10 +122,15 @@ abstract final class Api {
   }) async {
     final token = await Auth.idToken(forceRefresh: freshToken);
     if (token == null) {
+      Analytics.event('api_failed', {'endpoint': path, 'kind': 'signed_out'});
       throw const ApiFailure('Sign in to use Carry.', status: 401);
     }
+    final requestId = _newRequestId();
     final request = http.Request(method, Uri.parse('$baseUrl$path'))
-      ..headers['Authorization'] = 'Bearer $token';
+      ..headers['Authorization'] = 'Bearer $token'
+      // The server logs this and sends it back, so one event points at one
+      // line in the server's log.
+      ..headers['X-Request-ID'] = requestId;
     if (body != null) {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);
@@ -118,10 +146,21 @@ abstract final class Api {
       rethrow;
     } catch (e) {
       debugPrint('$method $path failed: $e');
-      throw ApiFailure(switch (e) {
-        SocketException() || http.ClientException() =>
-          'No internet connection. Connect and try again.',
-        TimeoutException() => 'That took too long. Try again.',
+      // The kind, never the message: an exception's text can carry a path or
+      // a URL. The request id is what ties this to the server's own log.
+      final kind = switch (e) {
+        SocketException() || http.ClientException() => 'offline',
+        TimeoutException() => 'timeout',
+        _ => 'unreachable',
+      };
+      Analytics.event('api_failed', {
+        'endpoint': path,
+        'kind': kind,
+        'request_id': requestId,
+      });
+      throw ApiFailure(switch (kind) {
+        'offline' => 'No internet connection. Connect and try again.',
+        'timeout' => 'That took too long. Try again.',
         _ => "Carry couldn't reach its server. Try again.",
       });
     }
@@ -162,17 +201,39 @@ abstract final class Api {
   }
 
   /// Turns a response into a body, or a sentence worth showing.
-  static Map<String, dynamic> _body(http.Response response) {
+  static Map<String, dynamic> _body(http.Response response, String path) {
     final status = response.statusCode;
+    final requestId = response.headers['x-request-id'];
     if (status >= 200 && status < 300) {
       if (response.body.isEmpty) return const {};
       try {
         return jsonDecode(response.body) as Map<String, dynamic>;
       } catch (e) {
         debugPrint('Server sent something unreadable: $e');
+        Analytics.event('api_failed', {
+          'endpoint': path,
+          'kind': 'bad_body',
+          'status': status,
+          'request_id': requestId,
+        });
         throw const ApiFailure("Carry couldn't read the server's answer.");
       }
     }
+
+    Analytics.event('api_failed', {
+      'endpoint': path,
+      'kind': switch (status) {
+        401 => 'unauthorized',
+        403 => 'forbidden',
+        404 => 'missing',
+        413 => 'too_large',
+        429 => 'rate_limited',
+        >= 500 => 'server_error',
+        _ => 'refused',
+      },
+      'status': status,
+      'request_id': requestId,
+    });
 
     // The server writes these for people; use its words when it sent any.
     final detail = _detail(response);

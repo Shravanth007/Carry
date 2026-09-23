@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
+import '../analytics/analytics.dart';
 import '../backup/backup.dart';
 import '../backup/backup_screen.dart';
 import '../session.dart';
@@ -46,6 +47,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadBackup() async {
     final on = await Backup.isOn();
     if (mounted) setState(() => _backupOn = on);
+  }
+
+  /// A row for something that isn't built. Saying so is better than a tap
+  /// that does nothing, and the count says whether to build it.
+  void _soon(String feature, String what) {
+    Analytics.event('soon_tapped', {'feature': feature});
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$what is coming. Not yet.')));
   }
 
   Future<void> _signOut() async {
@@ -124,11 +133,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Icons.chevron_right,
                     color: CarryColors.muted,
                   ),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const PermissionsScreen(),
-                    ),
-                  ),
+                  onTap: () {
+                    Analytics.screen('permissions');
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const PermissionsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 SettingsRow(
@@ -143,6 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: CarryColors.muted,
                   ),
                   onTap: () async {
+                    Analytics.screen('backup');
                     await Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const BackupScreen(),
@@ -152,12 +165,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                // Not built yet: shown so it's clearly on the way.
-                const SettingsRow(
+                // Not built yet: shown so it's clearly on the way. Tapping
+                // says so, and counts as a vote for building it.
+                SettingsRow(
                   title: 'MCP',
                   subtitle: 'Let your AI tools read your notes',
-                  trailing: SoonBadge(),
+                  trailing: const SoonBadge(),
                   titleColor: CarryColors.muted,
+                  onTap: () => _soon('mcp', 'Letting AI tools read your notes'),
                 ),
               ],
             ),

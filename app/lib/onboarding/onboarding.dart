@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../analytics/analytics.dart';
+import '../auth/auth.dart';
 import '../permissions/permissions.dart';
 import 'microphone_screen.dart';
 import 'welcome_screen.dart';
@@ -23,18 +25,12 @@ abstract final class Onboarding {
 
   static Future<void> markDone(String uid) => _prefs.setBool(_key(uid), true);
 
-  /// True only for an account signing in for the first time ever.
+  /// True only for an account signing in for the first time ever, which is
+  /// what decides whether to welcome someone.
   ///
-  /// Firebase stamps both times from its own clock when it creates an account,
-  /// so they match until that account signs in a second time — including after
-  /// a reinstall or on a new phone. Unknown times count as existing, so an
-  /// account is never welcomed twice.
-  static bool isNewAccount(User user) {
-    final created = user.metadata.creationTime;
-    final lastSignIn = user.metadata.lastSignInTime;
-    if (created == null || lastSignIn == null) return false;
-    return lastSignIn.difference(created).abs() < const Duration(minutes: 1);
-  }
+  /// The rule lives in [Auth] with the rest of what an account is; this is
+  /// here so the onboarding code reads as onboarding.
+  static bool isNewAccount(User user) => Auth.isNewAccount(user);
 }
 
 enum _Step { loading, welcome, microphone, home }
@@ -77,25 +73,33 @@ class _OnboardingGateState extends State<OnboardingGate> {
         Onboarding.isNewAccount(widget.user) &&
         !await Onboarding.isDone(widget.user.uid);
     if (!mounted) return;
+    Analytics.screen(onboard ? 'welcome' : 'home');
     setState(() => _step = onboard ? _Step.welcome : _Step.home);
   }
 
   /// After the greeting, only ask for the microphone if the phone hasn't
   /// granted it already — another account on this phone may have.
   Future<void> _afterWelcome() async {
+    Analytics.event('welcome_continued');
     final mic = await Permissions.micStatus();
     if (!mounted) return;
     if (mic == MicPermission.granted) {
-      await _finish();
+      // Another account on this phone already allowed it, so there is nothing
+      // to ask.
+      await _finish(askedForMic: false);
       return;
     }
+    Analytics.screen('microphone');
     setState(() => _step = _Step.microphone);
   }
 
   /// Marked at the end, so an app closed mid-way starts the flow again.
-  Future<void> _finish() async {
+  Future<void> _finish({bool askedForMic = true}) async {
     await Onboarding.markDone(widget.user.uid);
-    if (mounted) setState(() => _step = _Step.home);
+    Analytics.event('onboarding_finished', {'asked_for_mic': askedForMic});
+    if (!mounted) return;
+    Analytics.screen('home');
+    setState(() => _step = _Step.home);
   }
 
   @override

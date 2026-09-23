@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
+import '../analytics/analytics.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
 import 'backup.dart';
@@ -41,6 +42,18 @@ class _BackupScreenState extends State<BackupScreen> {
   /// One answer at a time. Writing the choice and reading it back takes a
   /// moment, and two taps racing through that can finish in the wrong order
   /// and leave backup on after the person turned it off.
+  /// Not built yet. A tap that says so, and counts as asking for it.
+  void _soonDrive() {
+    Analytics.event('soon_tapped', {'feature': 'google_drive'});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Keeping recordings in your own Drive is coming. Not yet.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggle(bool on) async {
     if (_saving) return;
     setState(() {
@@ -127,12 +140,13 @@ class _BackupScreenState extends State<BackupScreen> {
           ),
           const SizedBox(height: 28),
           const SectionLabel('Somewhere else'),
-          const SettingsCard(
+          SettingsCard(
             child: SettingsRow(
               title: 'Google Drive',
               subtitle: 'Keep recordings in your own Drive',
-              trailing: SoonBadge(),
+              trailing: const SoonBadge(),
               titleColor: CarryColors.muted,
+              onTap: _soonDrive,
             ),
           ),
         ],

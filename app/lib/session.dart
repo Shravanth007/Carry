@@ -1,3 +1,4 @@
+import 'analytics/analytics.dart';
 import 'auth/auth.dart';
 import 'notes/notes.dart';
 import 'settings/avatar_cache.dart';
@@ -9,6 +10,10 @@ import 'settings/avatar_cache.dart';
 /// by then the person is already out and a storage hiccup must not strand
 /// them on a signed-out screen.
 Future<void> signOutAndForget() async {
+  // Counted first, while this is still the account being counted: signing out
+  // makes AuthGate drop the analytics identity, and it may get there before
+  // this line does. Forgetting who someone was lives there, not here.
+  Analytics.event('signed_out');
   await Auth.signOut();
   Notes.clear();
   await AvatarCache.clear();
