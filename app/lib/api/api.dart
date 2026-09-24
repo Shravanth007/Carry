@@ -262,12 +262,26 @@ abstract final class Api {
 /// The account as the server knows it.
 @immutable
 class ServerUser {
-  const ServerUser({required this.uid, this.email, required this.since});
+  const ServerUser({
+    required this.uid,
+    this.email,
+    required this.since,
+    this.plan = 'free',
+    this.planUntil,
+    this.secondsLeft = 0,
+  });
 
   factory ServerUser.fromJson(Map<String, dynamic> json) => ServerUser(
     uid: json['uid'] as String,
     email: json['email'] as String?,
     since: DateTime.parse(json['since'] as String),
+    plan: json['plan'] as String? ?? 'free',
+    // `when` can't name a pattern variable: Dart keeps it for switch guards.
+    planUntil: switch (json['plan_until']) {
+      final String ends => DateTime.parse(ends),
+      _ => null,
+    },
+    secondsLeft: json['seconds_left'] as int? ?? 0,
   );
 
   final String uid;
@@ -275,4 +289,14 @@ class ServerUser {
 
   /// When this account first used Carry.
   final DateTime since;
+
+  /// 'free' or 'plus'. **This is the answer**: the store on the phone can say
+  /// what it likes, but only the server hears from RevenueCat's webhook.
+  final String plan;
+
+  /// When the paid period ends. Null on free.
+  final DateTime? planUntil;
+
+  /// Transcription left this month, in seconds.
+  final int secondsLeft;
 }

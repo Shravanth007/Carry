@@ -1,0 +1,282 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
+
+import '../api/api.dart';
+import '../settings/widgets.dart';
+import '../theme.dart';
+import '../widgets/scrollable_column.dart';
+import 'billing.dart';
+
+/// What Carry is offering, and what this account has.
+///
+/// The plan shown here is the **server's** answer, never the store's. The
+/// store makes buying happen; what someone may do afterwards is read back from
+/// `/me`, because that is the one answer a modified app can't fake.
+class PlanScreen extends StatefulWidget {
+  const PlanScreen({super.key, this.previewUser, this.previewProblem});
+
+  /// Fills the screen in for `flutter widget-preview start`, where there is
+  /// no server to ask.
+  final ServerUser? previewUser;
+  final String? previewProblem;
+
+  @override
+  State<PlanScreen> createState() => _PlanScreenState();
+}
+
+class _PlanScreenState extends State<PlanScreen> {
+  ServerUser? _account;
+  List<Offer> _offers = const [];
+  bool _loading = true;
+  bool _busy = false;
+  String? _problem;
+
+  bool get _isPreview =>
+      widget.previewUser != null || widget.previewProblem != null;
+
+  bool get _hasPlus => _account?.plan == 'plus';
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isPreview) {
+      _account = widget.previewUser;
+      _problem = widget.previewProblem;
+      _offers = const [
+        Offer(id: 'plus', title: 'Carry Plus', price: '₹199 / month'),
+      ];
+      _loading = false;
+      return;
+    }
+    _load();
+  }
+
+  Future<void> _load() async {
+    final account = await Billing.fromServer();
+    final offers = await Billing.offers();
+    if (!mounted) return;
+    setState(() {
+      _account = account;
+      _offers = offers;
+      _loading = false;
+      // A plan we couldn't read is not a plan we assume. Saying "free" when
+      // somebody is paying is the one wrong answer that costs trust.
+      _problem = account == null
+          ? "Carry couldn't check your plan. Pull down to try again."
+          : null;
+    });
+  }
+
+  Future<void> _buy(Offer offer) async {
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    final trouble = await Billing.buy(offer);
+    if (!mounted) return;
+    if (trouble == cancelled) {
+      // Closing the store's sheet is a decision, not an error.
+      setState(() => _busy = false);
+      return;
+    }
+    // Whatever the store said, the server decides. Asking it is also what
+    // catches a purchase the webhook hasn't landed for yet.
+    await _load();
+    if (mounted) setState(() => _busy = false);
+    if (trouble != null && mounted) setState(() => _problem = trouble);
+  }
+
+  Future<void> _restore() async {
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    final trouble = await Billing.restore();
+    await _load();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _problem =
+          trouble ?? (_hasPlus ? null : 'No earlier purchase to restore.');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Plan')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ScrollableColumn(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                _Current(account: _account),
+                const SizedBox(height: 20),
+                if (!_hasPlus) ...[
+                  for (final offer in _offers)
+                    _PlusCard(
+                      offer: offer,
+                      busy: _busy,
+                      onBuy: () => _buy(offer),
+                    ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _busy ? null : _restore,
+                    child: const Text('Restore a purchase'),
+                  ),
+                ],
+                if (_problem != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _problem!,
+                    style: text.bodyMedium?.copyWith(color: CarryColors.error),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  'Carry never stops you reaching what you already recorded. '
+                  'A plan only decides how much new audio it will transcribe.',
+                  style: text.bodySmall?.copyWith(color: CarryColors.muted),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// What this account has right now, as the server sees it.
+class _Current extends StatelessWidget {
+  const _Current({required this.account});
+
+  final ServerUser? account;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final user = account;
+    final plus = user?.plan == 'plus';
+    return SettingsCard(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              // Never "Free" when we simply couldn't ask: somebody paying
+              // shouldn't be told they didn't.
+              switch (user) {
+                null => 'Plan unknown',
+                _ when plus => 'Carry Plus',
+                _ => 'Free',
+              },
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(switch (user) {
+              null => "Couldn't reach the server",
+              _ =>
+                '${_minutes(user.secondsLeft)} of transcription left '
+                    'this month',
+            }, style: text.bodyMedium?.copyWith(color: CarryColors.muted)),
+            if (plus && user?.planUntil != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Renews ${_date(user!.planUntil!)}',
+                style: text.bodySmall?.copyWith(color: CarryColors.muted),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _minutes(int seconds) {
+    final minutes = seconds ~/ 60;
+    if (minutes >= 60) {
+      final hours = minutes ~/ 60;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
+  }
+
+  static String _date(DateTime when) =>
+      '${when.day}/${when.month}/${when.year}';
+}
+
+class _PlusCard extends StatelessWidget {
+  const _PlusCard({
+    required this.offer,
+    required this.busy,
+    required this.onBuy,
+  });
+
+  final Offer offer;
+  final bool busy;
+  final VoidCallback onBuy;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return SettingsCard(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              offer.title,
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '20 hours of transcription a month, and your audio kept for as '
+              'long as you keep the plan.',
+              style: text.bodyMedium?.copyWith(color: CarryColors.muted),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed: busy ? null : onBuy,
+                style: carryButton,
+                child: busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    : Text(offer.price),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+ServerUser _someone({String plan = 'free', int secondsLeft = 2400}) =>
+    ServerUser(
+      uid: 'preview',
+      since: DateTime(2026, 1, 1),
+      plan: plan,
+      planUntil: plan == 'plus' ? DateTime(2026, 11, 1) : null,
+      secondsLeft: secondsLeft,
+    );
+
+@Preview(name: 'Plan · free', wrapper: previewApp)
+Widget planFree() => PlanScreen(previewUser: _someone());
+
+@Preview(name: 'Plan · out of minutes', wrapper: previewApp)
+Widget planEmpty() => PlanScreen(previewUser: _someone(secondsLeft: 0));
+
+@Preview(name: 'Plan · plus', wrapper: previewApp)
+Widget planPlus() =>
+    PlanScreen(previewUser: _someone(plan: 'plus', secondsLeft: 71000));
+
+@Preview(name: 'Plan · server unreachable', wrapper: previewApp)
+Widget planUnknown() => const PlanScreen(
+  previewProblem: "Carry couldn't check your plan. Pull down to try again.",
+);
