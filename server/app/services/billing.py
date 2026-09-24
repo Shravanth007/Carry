@@ -116,8 +116,8 @@ def read(payload: dict) -> Event:
         uid=_text(event.get("app_user_id")),
         entitlements=tuple(str(e) for e in entitlements),
         period_end=_moment(event.get("expiration_at_ms")),
-        from_uid=_text(event.get("transferred_from")),
-        to_uid=_text(event.get("transferred_to")),
+        from_uid=_side(event.get("transferred_from")),
+        to_uid=_side(event.get("transferred_to")),
     )
 
 
@@ -316,6 +316,30 @@ def _transfer(conn, event: Event) -> None:
 
 def _text(value) -> str | None:
     return str(value) if value else None
+
+
+# What the store calls somebody before they sign in. Those IDs name nobody
+# here: our accounts are keyed by Firebase uid.
+ANONYMOUS = "$RCAnonymousID:"
+
+
+def _side(value) -> str | None:
+    """One end of a transfer.
+
+    RevenueCat sends each side as an *array* of app user IDs, not a string -
+    one customer can have several, the anonymous one the store issued before
+    they signed in and then ours. Only ours names an account, so the anonymous
+    ones are dropped. If that leaves more than one there is no way to choose
+    between them, and inventing an answer would either strand a subscription
+    or hand it to the wrong account, so we take none and let reconciliation
+    settle it.
+    """
+    ids = value if isinstance(value, list) else [value]
+    ours = [str(i) for i in ids if i and not str(i).startswith(ANONYMOUS)]
+    if len(ours) > 1:
+        log.warning("a transfer names %d accounts on one side; leaving it", len(ours))
+        return None
+    return ours[0] if ours else None
 
 
 def _moment(millis) -> datetime | None:

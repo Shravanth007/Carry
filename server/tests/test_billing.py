@@ -39,6 +39,12 @@ def event(
         "entitlement_ids": ["plus"] if entitlements is None else entitlements,
         "expiration_at_ms": int(ends.timestamp() * 1000) if ends else None,
     }
+    # The store names the two ends of a transfer as arrays, so the tests do
+    # too: a helper that sends a plain string would be testing a payload that
+    # never arrives.
+    for side in ("transferred_from", "transferred_to"):
+        if side in extra and not isinstance(extra[side], list):
+            extra[side] = [extra[side]]
     body.update(extra)
     return {"event": body}
 
@@ -550,6 +556,60 @@ class TestTransfer:
         )
 
         assert db.accounts["grace"]["plan"] == plans.FREE
+
+    def test_the_anonymous_id_the_store_made_is_not_an_account(self, database):
+        """Before somebody signs in the store calls them $RCAnonymousID:...,
+        and both ends of a transfer can carry those alongside ours. Ours is
+        the only one that names an account here."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t9",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from=["$RCAnonymousID:9f3c", "ada"],
+                    transferred_to=["$RCAnonymousID:1b7e", "grace"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.FREE
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+
+    def test_two_accounts_on_one_side_move_nothing(self, database):
+        """There is no way to tell which of them the subscription belongs to.
+        Guessing would either strand it or hand it to the wrong person, so
+        nothing moves and reconciliation settles it."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+                "hopper": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t10",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from="ada",
+                    transferred_to=["grace", "hopper"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.PLUS
+        assert db.accounts["grace"]["plan"] == plans.FREE
+        assert db.accounts["hopper"]["plan"] == plans.FREE
 
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and
