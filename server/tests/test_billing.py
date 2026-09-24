@@ -461,9 +461,11 @@ class TestTransfer:
         # Dropping it would lose paid access that cannot be replayed.
         assert db.accounts["grace"]["plan"] == plans.PLUS
 
-    def test_a_transfer_with_its_own_period_uses_it(self, database):
-        """The event knows when the subscription runs to; the source row might
-        be holding an older date, or a hand-granted one with no date at all."""
+    def test_a_transfer_uses_the_period_the_event_carries(self, database):
+        """The event says what moved and for how long. The source row is not a
+        substitute: an account can hold more than one purchase, and this model
+        keeps one plan per account, so that date may belong to a purchase that
+        is staying where it is."""
         db = database(
             {
                 "ada": {
@@ -490,10 +492,12 @@ class TestTransfer:
 
         assert db.accounts["grace"]["plan_until"] == LATER
 
-    def test_an_event_period_that_has_ended_does_not_lose_the_plan(self, database):
-        """The source is cleared before the destination is granted. Choosing
-        the event's period blindly would mean a stale one is refused and
-        neither account keeps access that is still paid for."""
+    def test_an_event_period_that_has_ended_moves_nothing(self, database):
+        """The subscription being transferred has ended, so there is nothing
+        to hand over - and the source's own date may belong to a different
+        purchase that is still running. Taking that away would lose paid
+        access, so both accounts are left alone and reconciliation settles it.
+        """
         gone = datetime.now(UTC) - timedelta(days=10)
         db = database(
             {
@@ -515,8 +519,9 @@ class TestTransfer:
             )
         )
 
-        assert db.accounts["grace"]["plan"] == plans.PLUS
-        assert db.accounts["grace"]["plan_until"] == LATER
+        assert db.accounts["ada"]["plan"] == plans.PLUS  # still running
+        assert db.accounts["ada"]["plan_until"] == LATER
+        assert db.accounts["grace"]["plan"] == plans.FREE  # nothing to give
 
     def test_a_hand_granted_period_is_not_handed_to_the_destination(self, database):
         """The grant's end date belongs to the grant, which stays put. Using it

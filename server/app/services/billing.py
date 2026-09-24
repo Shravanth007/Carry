@@ -284,6 +284,25 @@ def _transfer(conn, event: Event) -> None:
     # but the destination is still given the subscription, because dropping it
     # would lose paid access that cannot be replayed.
     paid = row[2] == "play"
+
+    # What is actually moving, and for how long.
+    #
+    # The event's own period when it carries one: that is the subscription
+    # being transferred. The source row's date is not a safe substitute - an
+    # account can hold more than one purchase, and this model keeps one plan
+    # per account, so that date may belong to a purchase that is staying put.
+    # It is only used when the event says nothing and the source was paid for.
+    until = event.period_end or (row[1] if paid else None)
+    if until is None or until <= datetime.now(UTC):
+        # Nothing to move: no period, or one that has already ended. Leave both
+        # accounts as they are rather than clearing a plan that is still
+        # running - reconciliation settles what we cannot work out from here.
+        log.info(
+            "transfer %s: nothing live to move from %s", event.id, event.from_uid
+        )
+        return
+
+    # Only now, when something is actually being handed over.
     if paid:
         conn.execute(
             "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
@@ -298,26 +317,7 @@ def _transfer(conn, event: Event) -> None:
             event.from_uid,
         )
 
-    # Which period the destination gets.
-    #
-    # The longest one we know about, not simply the event's: an event carrying
-    # a period that has already ended would otherwise be chosen, `_grant` would
-    # refuse it, and - with the source already cleared - neither account would
-    # keep access that was still paid for.
-    #
-    # A hand-granted source contributes no period at all. Its end date belongs
-    # to the grant, which stays where it is; using it here would hand the
-    # destination a Play-marked plan lasting longer than the subscription that
-    # actually moved.
-    periods = [when for when in (event.period_end, row[1] if paid else None) if when]
-    if not periods:
-        log.warning(
-            "transfer %s has no period to give %s; reconciliation will settle it",
-            event.id,
-            event.to_uid,
-        )
-        return
-    _grant(conn, event.to_uid, max(periods))
+    _grant(conn, event.to_uid, until)
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 
 
