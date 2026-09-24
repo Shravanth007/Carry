@@ -7,6 +7,14 @@ import '../theme.dart';
 import '../widgets/scrollable_column.dart';
 import 'billing.dart';
 
+/// How long to wait between asking the server again after a purchase.
+///
+/// A seam, like the recorder's clock: tests set it to zero rather than leaving
+/// real timers pending, which is how a widget test ends up reporting a leak
+/// that isn't one.
+@visibleForTesting
+Duration webhookWait = const Duration(seconds: 1);
+
 /// What Carry is offering, and what this account has.
 ///
 /// The plan shown here is the **server's** answer, never the store's. The
@@ -30,6 +38,9 @@ class _PlanScreenState extends State<PlanScreen> {
   bool _loading = true;
   bool _busy = false;
   String? _problem;
+
+  /// True when a purchase went through but the server hasn't heard yet.
+  bool _justBought = false;
 
   bool get _isPreview =>
       widget.previewUser != null || widget.previewProblem != null;
@@ -64,6 +75,7 @@ class _PlanScreenState extends State<PlanScreen> {
       _problem = account == null
           ? "Carry couldn't check your plan. Pull down to try again."
           : null;
+      if (account?.plan == 'plus') _justBought = false;
     });
   }
 
@@ -72,18 +84,34 @@ class _PlanScreenState extends State<PlanScreen> {
       _busy = true;
       _problem = null;
     });
-    final trouble = await Billing.buy(offer);
-    if (!mounted) return;
-    if (trouble == cancelled) {
-      // Closing the store's sheet is a decision, not an error.
-      setState(() => _busy = false);
-      return;
+    String? trouble;
+    try {
+      trouble = await Billing.buy(offer);
+      if (!mounted) return;
+      if (trouble == cancelled) return; // closing the sheet is a decision
+      // Whatever the store said, the server decides - and it hears through a
+      // webhook, which takes a moment to arrive. Ask again a few times before
+      // telling somebody who has just paid that they are on free.
+      await _load();
+      // The store has taken the money, but the server only hears through a
+      // webhook, which takes a moment. Say so, rather than showing "Free" and
+      // a buy button to somebody who has just paid.
+      if (mounted && trouble == null && !_hasPlus) {
+        setState(() => _justBought = true);
+      }
+      if (mounted && trouble != null) setState(() => _problem = trouble);
+    } catch (e) {
+      debugPrint('Buying went wrong: $e');
+      if (mounted) {
+        setState(
+          () => _problem = "That didn't go through. Nothing was charged.",
+        );
+      }
+    } finally {
+      // Every path, including the ones that threw: a screen whose buttons
+      // never come back is worse than the failure that disabled them.
+      if (mounted) setState(() => _busy = false);
     }
-    // Whatever the store said, the server decides. Asking it is also what
-    // catches a purchase the webhook hasn't landed for yet.
-    await _load();
-    if (mounted) setState(() => _busy = false);
-    if (trouble != null && mounted) setState(() => _problem = trouble);
   }
 
   Future<void> _restore() async {
@@ -91,14 +119,33 @@ class _PlanScreenState extends State<PlanScreen> {
       _busy = true;
       _problem = null;
     });
-    final trouble = await Billing.restore();
-    await _load();
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _problem =
-          trouble ?? (_hasPlus ? null : 'No earlier purchase to restore.');
-    });
+    try {
+      final trouble = await Billing.restore();
+      if (trouble != null) {
+        if (mounted) setState(() => _problem = trouble);
+        return;
+      }
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        // "Nothing to restore" is a claim about the account, so it can only
+        // be made when the server actually answered. If the plan is unknown,
+        // _load has already said so, and saying this instead would tell a
+        // paying customer they never bought anything.
+        if (_account != null && !_hasPlus) {
+          _problem = 'No earlier purchase to restore.';
+        }
+      });
+    } catch (e) {
+      debugPrint('Restoring went wrong: $e');
+      if (mounted) {
+        setState(
+          () => _problem = "Carry couldn't check for an earlier purchase.",
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -108,38 +155,55 @@ class _PlanScreenState extends State<PlanScreen> {
       appBar: AppBar(title: const Text('Plan')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ScrollableColumn(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              children: [
-                _Current(account: _account),
-                const SizedBox(height: 20),
-                if (!_hasPlus) ...[
-                  for (final offer in _offers)
-                    _PlusCard(
-                      offer: offer,
-                      busy: _busy,
-                      onBuy: () => _buy(offer),
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ScrollableColumn(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                children: [
+                  _Current(account: _account),
+                  const SizedBox(height: 20),
+                  if (!_hasPlus) ...[
+                    for (final offer in _offers)
+                      _PlusCard(
+                        offer: offer,
+                        busy: _busy,
+                        onBuy: () => _buy(offer),
+                      ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _busy ? null : _restore,
+                      child: const Text('Restore a purchase'),
                     ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: _busy ? null : _restore,
-                    child: const Text('Restore a purchase'),
-                  ),
-                ],
-                if (_problem != null) ...[
-                  const SizedBox(height: 8),
+                  ],
+                  if (_justBought && !_hasPlus) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Thanks — the store has your payment. It can take a moment '
+                      'to reach Carry.',
+                      style: text.bodyMedium,
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : _load,
+                      child: const Text('Check again'),
+                    ),
+                  ],
+                  if (_problem != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _problem!,
+                      style: text.bodyMedium?.copyWith(
+                        color: CarryColors.error,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   Text(
-                    _problem!,
-                    style: text.bodyMedium?.copyWith(color: CarryColors.error),
+                    'Carry never stops you reaching what you already recorded. '
+                    'A plan only decides how much new audio it will transcribe.',
+                    style: text.bodySmall?.copyWith(color: CarryColors.muted),
                   ),
                 ],
-                const SizedBox(height: 16),
-                Text(
-                  'Carry never stops you reaching what you already recorded. '
-                  'A plan only decides how much new audio it will transcribe.',
-                  style: text.bodySmall?.copyWith(color: CarryColors.muted),
-                ),
-              ],
+              ),
             ),
     );
   }
@@ -173,16 +237,20 @@ class _Current extends StatelessWidget {
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 4),
-            Text(switch (user) {
-              null => "Couldn't reach the server",
-              _ =>
-                '${_minutes(user.secondsLeft)} of transcription left '
-                    'this month',
+            Text(switch (user?.secondsLeft) {
+              // Three different things, and only one of them is bad news.
+              null when user == null => "Couldn't reach the server",
+              null => 'How much is left is unknown just now',
+              final int left =>
+                '${_minutes(left)} of transcription left this month',
             }, style: text.bodyMedium?.copyWith(color: CarryColors.muted)),
             if (plus && user?.planUntil != null) ...[
               const SizedBox(height: 4),
               Text(
-                'Renews ${_date(user!.planUntil!)}',
+                // Not "renews": a cancelled subscription still runs to this
+                // date, and telling somebody it renews would be wrong in the
+                // one case they care about.
+                'Your plan runs until ${_date(user!.planUntil!)}',
                 style: text.bodySmall?.copyWith(color: CarryColors.muted),
               ),
             ],
@@ -194,11 +262,13 @@ class _Current extends StatelessWidget {
 
   static String _minutes(int seconds) {
     final minutes = seconds ~/ 60;
-    if (minutes >= 60) {
-      final hours = minutes ~/ 60;
-      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
-    }
-    return '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
+    if (minutes < 60) return '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    final saidHours = '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    // Nearly two hours should not read as one: dropping the minutes
+    // understates the allowance for most of every hour.
+    return rest == 0 ? saidHours : '$saidHours $rest min';
   }
 
   static String _date(DateTime when) =>

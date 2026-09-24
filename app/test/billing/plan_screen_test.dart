@@ -39,6 +39,13 @@ void main() {
     );
   }
 
+  /// Lets the taps' async work finish.
+  Future<void> settle(WidgetTester tester) async {
+    for (var round = 0; round < 6; round++) {
+      await tester.pump();
+    }
+  }
+
   Future<void> openPlan(WidgetTester tester) async {
     await pumpScreen(tester, const PlanScreen());
     await tester.pump(); // the server answers
@@ -106,7 +113,7 @@ void main() {
 
     await tester.tap(find.text('₹199 / month'));
     await tester.pump();
-    await tester.pump();
+    await settle(tester);
 
     expect(find.textContaining('cancelled'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
@@ -120,7 +127,7 @@ void main() {
 
     await tester.tap(find.text('Restore a purchase'));
     await tester.pump();
-    await tester.pump();
+    await settle(tester);
 
     expect(store.restores, 1);
     expect(find.textContaining('No earlier purchase'), findsOneWidget);

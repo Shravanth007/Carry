@@ -73,6 +73,43 @@ abstract final class Billing {
   @visibleForTesting
   static PurchaseStore store = const DemoStore();
 
+  /// Identity changes, one after another, in the order they were asked for.
+  ///
+  /// Signing in and out are fire-and-forget from the caller's point of view,
+  /// so without this a sign-out started first can finish last and wipe the
+  /// identity of whoever just signed in. Buying waits on the same chain, so a
+  /// purchase can never be made under the previous account — the server would
+  /// have no way to credit it.
+  ///
+  /// **Null means nothing is in flight**, rather than a future that has
+  /// already completed. A `Future` belongs to the zone that made it, and a
+  /// widget test runs in a zone of its own: one made in `setUp` never gets its
+  /// microtask run inside the test, so awaiting it hangs for ever. Storing
+  /// null and making the future where it is awaited keeps that impossible.
+  static Future<void>? _identity;
+
+  static Future<void> _queue(Future<void> Function() change) {
+    final next = settled().then((_) => change()).catchError((Object e) {
+      debugPrint('Store identity: $e');
+    });
+    _identity = next;
+    return next;
+  }
+
+  /// Waits for any identity change still in flight.
+  @visibleForTesting
+  static Future<void> settled() => _identity ?? Future<void>.value();
+
+  /// Back to how a fresh app starts: the demo store, and nothing in flight.
+  ///
+  /// The identity chain is static, so without this one test's unfinished
+  /// sign-in can be what the next test is waiting on.
+  @visibleForTesting
+  static void resetForTesting() {
+    store = const DemoStore();
+    _identity = null;
+  }
+
   /// True when real money can change hands.
   static bool get isLive => store is _RevenueCat;
 
@@ -97,13 +134,9 @@ abstract final class Billing {
   /// It has to be the Firebase uid: the webhook tells the server which
   /// account changed by that id, and an account that bought under a different
   /// one is an account the server can't credit.
-  static Future<void> identify(String uid) => _quietly(
-    () => store.identify(uid),
-    'Could not tell the store who is signed in',
-  );
+  static Future<void> identify(String uid) => _queue(() => store.identify(uid));
 
-  static Future<void> forget() =>
-      _quietly(store.forget, 'Could not sign out of the store');
+  static Future<void> forget() => _queue(store.forget);
 
   static Future<List<Offer>> offers() async {
     try {
@@ -115,6 +148,8 @@ abstract final class Billing {
   }
 
   static Future<String?> buy(Offer offer) async {
+    // Whoever is signed in now is who this is bought for.
+    await settled();
     Analytics.event('upgrade_started', {'offer': offer.id});
     final trouble = await store.buy(offer);
     Analytics.event(
@@ -129,6 +164,7 @@ abstract final class Billing {
   }
 
   static Future<String?> restore() async {
+    await settled();
     Analytics.event('restore_used');
     return store.restore();
   }
@@ -146,17 +182,6 @@ abstract final class Billing {
     } catch (e) {
       debugPrint('Could not read the plan from the server: $e');
       return null;
-    }
-  }
-
-  static Future<void> _quietly(
-    Future<void> Function() call,
-    String whenWrong,
-  ) async {
-    try {
-      await call();
-    } catch (e) {
-      debugPrint('$whenWrong: $e');
     }
   }
 }

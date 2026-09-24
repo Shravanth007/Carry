@@ -52,8 +52,9 @@ class TestStore implements PurchaseStore {
 
 /// Points [Billing] at a test store for the current test.
 TestStore setUpTestStore() {
+  Billing.resetForTesting();
   final store = TestStore();
   Billing.store = store;
-  addTearDown(() => Billing.store = const DemoStore());
+  addTearDown(Billing.resetForTesting);
   return store;
 }

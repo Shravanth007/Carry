@@ -268,7 +268,7 @@ class ServerUser {
     required this.since,
     this.plan = 'free',
     this.planUntil,
-    this.secondsLeft = 0,
+    this.secondsLeft,
   });
 
   factory ServerUser.fromJson(Map<String, dynamic> json) => ServerUser(
@@ -281,7 +281,10 @@ class ServerUser {
       final String ends => DateTime.parse(ends),
       _ => null,
     },
-    secondsLeft: json['seconds_left'] as int? ?? 0,
+    // Null, not zero: a server that didn't say is not a server saying
+    // "none left". Showing "0 minutes" for an allowance nobody reported is
+    // telling somebody they are out when they are not.
+    secondsLeft: json['seconds_left'] as int?,
   );
 
   final String uid;
@@ -297,6 +300,7 @@ class ServerUser {
   /// When the paid period ends. Null on free.
   final DateTime? planUntil;
 
-  /// Transcription left this month, in seconds.
-  final int secondsLeft;
+  /// Transcription left this month, in seconds. Null when the server didn't
+  /// say, which is not the same as none.
+  final int? secondsLeft;
 }
