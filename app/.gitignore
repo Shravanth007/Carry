@@ -50,3 +50,7 @@ app.*.map.json
 # Gradle build output for the Android host
 android/build/
 android/app/build/
+
+# The Kotlin compiler's session files, written on every Gradle build. Noise in
+# git status is how the wrong file ends up in a commit.
+android/.kotlin/
