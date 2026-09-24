@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../analytics/analytics.dart';
+import '../billing/billing.dart';
 
 import 'sign_in_screen.dart';
 
@@ -103,6 +104,10 @@ abstract final class Auth {
       debugPrint("Couldn't read the account for analytics: $e");
     }
     Analytics.event('sign_in_succeeded', {'is_new_account': isNew});
+    // Purchases are tied to the same uid the server keys everything on. A
+    // purchase made under a different id is one the server can't credit.
+    final signedInUser = signedIn.user;
+    if (signedInUser != null) unawaited(Billing.identify(signedInUser.uid));
   }
 
   /// A short code for why a sign-in failed, for events and logs. Never the
@@ -169,6 +174,7 @@ class _AuthGateState extends State<AuthGate> {
           // an expired session can't leave events attributed to whoever was
           // here last.
           Analytics.reset();
+          unawaited(Billing.forget());
           Analytics.screen('sign_in');
         }
       }

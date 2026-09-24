@@ -3,6 +3,7 @@ import 'package:flutter/widget_previews.dart';
 
 import '../analytics/analytics.dart';
 import '../backup/backup.dart';
+import '../billing/plan_screen.dart';
 import '../backup/backup_screen.dart';
 import '../session.dart';
 import '../theme.dart';
@@ -162,6 +163,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     );
                     await _loadBackup(); // it may have been switched there
+                  },
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                SettingsRow(
+                  title: 'Plan',
+                  subtitle: 'What Carry will transcribe for you',
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: CarryColors.muted,
+                  ),
+                  onTap: () {
+                    Analytics.screen('plan');
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const PlanScreen(),
+                      ),
+                    );
                   },
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),

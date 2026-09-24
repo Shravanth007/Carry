@@ -80,16 +80,21 @@ compiles against SDK 37, which the Android SDK currently publishes only as
 - Numbers the server also enforces live in `lib/limits.dart`, never inline in
   a screen. The app's copy is there to answer quickly; the server's is the one
   that decides.
+- **Purchases go through `lib/billing/billing.dart`.** Nothing else imports
+  `purchases_flutter`. The store makes buying happen; **what someone may do
+  afterwards comes from the server**, and when the two disagree the server
+  wins. A build with no key gets a demo store, so the screens still work
+  without an account, a product, or any money.
 - **Analytics go through `lib/analytics/analytics.dart`, and events are sent
   from the feature facades, never from a widget.** A facade knows why something
   happened; a `build` method doesn't, and it runs again on every rebuild. See
   the doc for what must never be sent.
 - Screens take plain values, not Firebase objects, so they can be previewed
   and tested.
-- Before `runApp`, only initialize Firebase, `Auth` and `Analytics` — the
-  third because the first screen someone sees should be counted, and it does
-  nothing at all in a build with no key. Everything else runs after the first
-  frame.
+- Before `runApp`, only initialize Firebase, `Auth`, `Analytics` and
+  `Billing`. The last two because the first screen someone sees should be
+  counted and should know its plan, and because both do nothing at all in a
+  build with no key. Everything else runs after the first frame.
 
 ### UI
 - Colors come from `CarryColors`. Screens have no hex values, except the
