@@ -182,35 +182,62 @@ def _apply_to_account(conn, event: Event) -> None:
 
 
 def _grant(conn, uid: str, until: datetime | None) -> None:
-    """Gives the plan, but never shortens one that already runs longer.
+    """Gives the plan, if the event is one we can act on.
 
-    Webhooks arrive out of order. An old renewal landing after a newer one must
-    not pull somebody's expiry backwards, so the longest period we have heard
-    about wins.
+    Three refusals, each of which was a way to hand out access that shouldn't
+    have been handed out:
+
+    * **No end date, no grant.** A grant with nothing to expire is a plan that
+      never ends, which is not something Carry sells.
+    * **A period that already ended grants nothing.** A delayed renewal for
+      last month must not restore access that has since been taken away — with
+      `plan_until` cleared there is nothing left to compare it against.
+    * **The longest period wins**, so an old event can't shorten a newer one.
+
+    Written as an upsert because the webhook can arrive before the account's
+    first request. An UPDATE would change no row, the event would be recorded
+    as applied, and somebody would have paid for nothing with no way to replay
+    it.
     """
+    if until is None:
+        log.warning("grant for %s has no end date, ignoring it", uid)
+        return
+    if until <= datetime.now(UTC):
+        log.info("grant for %s is for a period that already ended", uid)
+        return
     conn.execute(
         """
-        UPDATE users
-           SET plan = %s,
-               plan_source = 'play',
-               plan_until = GREATEST(%s, COALESCE(plan_until, %s))
-         WHERE uid = %s
+        INSERT INTO users (uid, plan, plan_source, plan_until)
+        VALUES (%s, %s, 'play', %s)
+        ON CONFLICT (uid) DO UPDATE
+            SET plan = EXCLUDED.plan,
+                plan_source = 'play',
+                plan_until = GREATEST(
+                    EXCLUDED.plan_until,
+                    COALESCE(users.plan_until, EXCLUDED.plan_until)
+                )
         """,
-        (plans.PLUS, until, until, uid),
+        (uid, plans.PLUS, until),
     )
 
 
 def _end(conn, uid: str, event: Event) -> None:
     """Takes the plan away, when it is really over.
 
-    A refund is immediate: the money went back, so the access goes with it.
+    Both kinds of ending ask the same question — *is this about the period we
+    are holding?* — because both can arrive late:
 
-    An expiry is a question, not an instruction — *has the period we hold
-    ended?* An old `EXPIRATION` arriving after a newer renewal would otherwise
-    revoke a plan that has since been paid for, which is the kind of thing you
-    hear about from the one customer it happened to.
+    * a stale `EXPIRATION` after a newer renewal would revoke a plan that has
+      since been paid for;
+    * a refund of **last** month, arriving after this month was paid for,
+      would do exactly the same.
+
+    A refund with no period at all is the one case that still revokes: money
+    going back is an explicit signal, it is rare, and reconciliation will put
+    it right if the store meant otherwise.
     """
-    if event.kind == "REFUND":
+    if event.kind == "REFUND" and event.period_end is None:
+        log.warning("refund for %s has no period, revoking anyway", uid)
         conn.execute(
             "UPDATE users SET plan = %s, plan_until = NULL WHERE uid = %s",
             (plans.FREE, uid),
@@ -234,15 +261,26 @@ def _transfer(conn, event: Event) -> None:
     One Play account, two Google logins: the store moves the entitlement, and
     if we only added it to the new account the old one would keep a plan
     nobody is paying for. It has to move, not copy.
+
+    The source row is locked before it is read. Without that, two transfers
+    from the same account can both see Plus and both hand it out — the
+    transaction makes each one atomic without stopping the plan being copied.
+
+    A plan we granted by hand is left alone: it isn't the subscription being
+    transferred, and taking it away would punish the wrong person.
     """
     if not event.from_uid or not event.to_uid:
         log.warning("transfer %s is missing an account", event.id)
         return
     row = conn.execute(
-        "SELECT plan, plan_until FROM users WHERE uid = %s", (event.from_uid,)
+        "SELECT plan, plan_until, plan_source FROM users WHERE uid = %s FOR UPDATE",
+        (event.from_uid,),
     ).fetchone()
     if row is None or row[0] == plans.FREE:
         log.info("transfer %s: nothing to move", event.id)
+        return
+    if row[2] != "play":
+        log.info("transfer %s: %s was granted by hand, leaving it", event.id, row[0])
         return
     conn.execute(
         "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
@@ -251,13 +289,17 @@ def _transfer(conn, event: Event) -> None:
     )
     conn.execute(
         """
-        UPDATE users
-           SET plan = %s,
-               plan_source = 'play',
-               plan_until = GREATEST(%s, COALESCE(plan_until, %s))
-         WHERE uid = %s
+        INSERT INTO users (uid, plan, plan_source, plan_until)
+        VALUES (%s, %s, 'play', %s)
+        ON CONFLICT (uid) DO UPDATE
+            SET plan = EXCLUDED.plan,
+                plan_source = 'play',
+                plan_until = GREATEST(
+                    EXCLUDED.plan_until,
+                    COALESCE(users.plan_until, EXCLUDED.plan_until)
+                )
         """,
-        (row[0], row[1], row[1], event.to_uid),
+        (event.to_uid, row[0], row[1]),
     )
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 

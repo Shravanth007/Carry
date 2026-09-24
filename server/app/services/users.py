@@ -1,7 +1,7 @@
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Protocol
 
 import psycopg
@@ -25,10 +25,26 @@ class CarryUser:
     email: str | None
     created_at: datetime
     blocked: bool
-    #: 'free' or 'plus'. What they may do lives in `plans.py`, never here.
+    #: 'free' or 'plus' as stored. Ask [effective_plan] for what they may
+    #: actually do: a period that has passed is free whatever the row says.
     plan: str = plans.FREE
     #: When the paid period ends. None on free.
     plan_until: datetime | None = None
+
+    @property
+    def effective_plan(self) -> str:
+        """The plan as it stands right now.
+
+        An expiry webhook can be missed - stores drop them, and ours has a
+        reconciliation path precisely because they do. Reading the stored plan
+        without its end date would leave somebody on the paid allowance for
+        ever after they stopped paying.
+        """
+        if self.plan == plans.FREE:
+            return plans.FREE
+        if self.plan_until is not None and self.plan_until <= datetime.now(UTC):
+            return plans.FREE
+        return self.plan
 
 
 class UserStore(Protocol):

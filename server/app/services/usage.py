@@ -101,7 +101,9 @@ def spent(store: UsageStore, user: CarryUser, when: datetime | None = None) -> S
     """How much of this month's allowance is gone."""
     return Spent(
         used_seconds=store.used(user.uid, month_of(when)),
-        allowed_seconds=plans.allowance(user.plan).transcription_seconds,
+        # The plan as it stands, not as it is stored: a period that has
+        # passed allows what free allows.
+        allowed_seconds=plans.allowance(user.effective_plan).transcription_seconds,
     )
 
 

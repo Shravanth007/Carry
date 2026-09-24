@@ -109,3 +109,54 @@ class TestTheQuota:
 
         with pytest.raises(usage.OverQuota):
             usage.check(counted, account("enterprise_v3"), 60, JANUARY)
+
+
+class TestAnExpiredPlan:
+    """A missed expiry webhook must not leave somebody on the paid allowance
+    for ever. Stores drop webhooks - the reconciliation path exists because
+    they do - so the end date is part of the answer, not just the plan name."""
+
+    def test_a_plan_whose_period_has_passed_allows_what_free_allows(self):
+        counted = TestUsage()
+        expired = CarryUser(
+            uid="ada",
+            email=None,
+            created_at=JANUARY,
+            blocked=False,
+            plan=plans.PLUS,
+            plan_until=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+        allowed = usage.spent(counted, expired, JANUARY).allowed_seconds
+
+        assert allowed == plans.PLANS["free"].transcription_seconds
+
+    def test_a_plan_still_running_allows_the_paid_amount(self):
+        counted = TestUsage()
+        current = CarryUser(
+            uid="ada",
+            email=None,
+            created_at=JANUARY,
+            blocked=False,
+            plan=plans.PLUS,
+            plan_until=datetime(2027, 1, 1, tzinfo=UTC),
+        )
+
+        allowed = usage.spent(counted, current, JANUARY).allowed_seconds
+
+        assert allowed == plans.PLANS["plus"].transcription_seconds
+
+    def test_and_the_quota_uses_the_same_answer(self):
+        counted = TestUsage()
+        usage.record(counted, "ada", 3590, JANUARY)
+        expired = CarryUser(
+            uid="ada",
+            email=None,
+            created_at=JANUARY,
+            blocked=False,
+            plan=plans.PLUS,
+            plan_until=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+        with pytest.raises(usage.OverQuota):
+            usage.check(counted, expired, 60, JANUARY)
