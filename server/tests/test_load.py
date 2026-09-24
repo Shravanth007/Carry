@@ -202,13 +202,13 @@ class TestWriteThrottle:
     def test_the_first_call_claims_the_write(self):
         store = PostgresUsers()
 
-        assert store._claim("ada", now=0) is True  # noqa: SLF001 - the point
+        assert store._claim("ada", now=0) == 0  # noqa: SLF001 - the point
 
     def test_a_call_straight_after_reads_instead(self):
         store = PostgresUsers()
         store._claim("ada", now=0)  # noqa: SLF001
 
-        assert store._claim("ada", now=30) is False  # noqa: SLF001
+        assert store._claim("ada", now=30) is None  # noqa: SLF001
 
     def test_requests_at_the_same_moment_do_not_all_write(self):
         """The reason the claim is taken before the write, not recorded after
@@ -219,30 +219,43 @@ class TestWriteThrottle:
 
         claims = [store._claim("ada", now=0) for _ in range(20)]  # noqa: SLF001
 
-        assert claims.count(True) == 1
+        assert len([c for c in claims if c is not None]) == 1
 
     def test_and_claims_again_once_the_interval_has_passed(self):
         store = PostgresUsers()
         store._claim("ada", now=0)  # noqa: SLF001
         later = config.SEEN_WRITE_EVERY_SECONDS + 1
 
-        assert store._claim("ada", now=later) is True  # noqa: SLF001
+        assert store._claim("ada", now=later) == later  # noqa: SLF001
 
     def test_a_claim_given_back_lets_the_next_call_try(self):
         """A write that failed in a database blip must not buy five minutes of
         not trying again."""
         store = PostgresUsers()
-        store._claim("ada", now=0)  # noqa: SLF001
+        claimed = store._claim("ada", now=0)  # noqa: SLF001
 
-        store._release("ada")  # noqa: SLF001
+        store._release("ada", claimed)  # noqa: SLF001
 
-        assert store._claim("ada", now=1) is True  # noqa: SLF001
+        assert store._claim("ada", now=1) == 1  # noqa: SLF001
+
+    def test_a_late_failure_cannot_give_back_someone_else_s_claim(self):
+        """A write slow enough to outlive the interval can fail after another
+        request has taken the slot. Releasing then would undo a throttle the
+        failure had nothing to do with."""
+        store = PostgresUsers()
+        slow = store._claim("ada", now=0)  # noqa: SLF001
+        later = config.SEEN_WRITE_EVERY_SECONDS + 1
+        store._claim("ada", now=later)  # noqa: SLF001 - the next one takes it
+
+        store._release("ada", slow)  # noqa: SLF001 - the slow write finally fails
+
+        assert store._claim("ada", now=later + 1) is None  # noqa: SLF001
 
     def test_accounts_are_counted_apart(self):
         store = PostgresUsers()
         store._claim("ada", now=0)  # noqa: SLF001
 
-        assert store._claim("grace", now=0) is True  # noqa: SLF001
+        assert store._claim("grace", now=0) is not None  # noqa: SLF001
 
 
 class _FakeCursor:
@@ -334,7 +347,7 @@ class TestSeenAgainstTheDatabase:
         renamed = ("ada", "new@example.com", ROW[2], False)
         store, statements = _store_talking_to(monkeypatch, [ROW, renamed])
         store.seen("ada", "ada@example.com")
-        store._release("ada")  # noqa: SLF001 - stand in for the interval passing
+        store._written.clear()  # noqa: SLF001 - stands in for the interval passing
 
         user = store.seen("ada", "new@example.com")
 

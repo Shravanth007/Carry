@@ -63,7 +63,7 @@ class PostgresUsers:
         self._lock = threading.Lock()
         self._checks = 0
 
-    def _claim(self, uid: str, now: float | None = None) -> bool:
+    def _claim(self, uid: str, now: float | None = None) -> float | None:
         """Takes the right to write this account's timestamp, or says no.
 
         Claimed **before** the write, not recorded after it. Recording after
@@ -79,15 +79,23 @@ class PostgresUsers:
         with self._lock:
             last = self._written.get(uid)
             if last is not None and now - last < config.SEEN_WRITE_EVERY_SECONDS:
-                return False
+                return None
             self._written[uid] = now
             self._forget_old(now)
-            return True
+            return now
 
-    def _release(self, uid: str) -> None:
-        """Gives back a claim whose write didn't happen."""
+    def _release(self, uid: str, claimed: float) -> None:
+        """Gives back a claim whose write didn't happen.
+
+        Only if it is still the same claim. A write slow enough to outlive the
+        interval can fail after another request has taken the slot, and giving
+        back somebody else's claim would let a third request write straight
+        away - the throttle quietly undone by a failure it had nothing to do
+        with.
+        """
         with self._lock:
-            self._written.pop(uid, None)
+            if self._written.get(uid) == claimed:
+                del self._written[uid]
 
     def _forget_old(self, now: float) -> None:
         """Drops accounts whose entry has expired anyway.
@@ -110,9 +118,9 @@ class PostgresUsers:
             del self._written[uid]
 
     def seen(self, uid: str, email: str | None) -> CarryUser:
-        writing = self._claim(uid)
+        claimed = self._claim(uid)
         try:
-            row = self._upsert(uid, email) if writing else self._read(uid)
+            row = self._upsert(uid, email) if claimed else self._read(uid)
             # The row can only be missing on the read path, and only if the
             # account was deleted between calls. Create it again.
             if row is None:
@@ -120,8 +128,8 @@ class PostgresUsers:
         # Neon suspends an idle branch, and networks drop. A hiccup is a 503
         # the app can retry, not a 500 that looks like a bug in Carry.
         except psycopg.Error as e:
-            if writing:
-                self._release(uid)
+            if claimed is not None:
+                self._release(uid, claimed)
             raise db.Unavailable(f"users.seen failed: {e}") from e
         return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
 
