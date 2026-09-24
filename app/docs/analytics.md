@@ -114,10 +114,22 @@ start), and push notification capture (there is no push).
 `server_error`, `refused`, `bad_body`, `wrong_shape`.
 
 **Refusal reasons are shared.** `Notes.addAudio` is the one gate audio passes
-through, and it returns a code: `no_owner`, `empty`, `too_large`, `too_short`,
+through, and it returns a code: `no_owner`, `empty`, `too_large`,
 `account_changed`. Both `recording_refused` and `import_rejected` carry it, so
-the two paths read the same way in a funnel. `import_rejected` also has reasons
-of its own from before the gate: `signed_out`, `wrong_type`, `could_not_copy`.
+the two paths read the same way in a funnel.
+
+Which of them you can actually expect to see, per path:
+
+| Reason | From a recording | From an import |
+|---|---|---|
+| `too_large`, `account_changed` | yes | yes |
+| `empty` | no — the recorder drops an empty file first and sends `recording_too_short` | yes, refused before the copy |
+| `no_owner` | no — refused before the microphone, as `signed_out` | no — refused before the picker, as `signed_out` |
+
+So `no_owner` firing at all would mean something reached the gate that both
+paths should have turned away earlier, which is worth looking into rather than
+counting. `import_rejected` also has reasons of its own from before the gate:
+`signed_out`, `wrong_type`, `could_not_copy`.
 
 **`request_id` is the useful one.** Every request carries an `X-Request-ID`
 header, the server logs it and sends it back, so an event in PostHog points at

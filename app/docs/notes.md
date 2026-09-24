@@ -111,13 +111,16 @@ It holds either kind to the same rules:
 | Still the signed-in account when it's kept | yes | yes |
 | Not empty | yes | yes |
 | Not over `Limits.uploadBytes` | yes | checked before the copy too, so a big file isn't copied first |
-| Not under `Limits.shortest` | yes | duration unknown, so not checked here |
 
-**`Limits.recording` is not in that table on purpose.** The length cap is
-enforced *while recording* — the bar stops and saves at an hour — and never by
-throwing audio away afterwards. A recording stopped at the cap is always a
-shade past it by the time it's written, and deleting an hour of someone's voice
-over a few milliseconds is the worst answer available.
+**Length isn't in that table, and neither limit belongs in the gate.**
+
+`Limits.shortest` is the recorder's. It drops a mis-tap before any note exists,
+which the gate couldn't do without leaving a file behind.
+
+`Limits.recording` is enforced *while recording* — the bar stops and saves at an
+hour — and never by throwing audio away afterwards. A recording stopped at the
+cap is always a shade past it by the time it's written, and deleting an hour of
+someone's voice over a few milliseconds is the worst answer available.
 
 **An import brings no duration.** Nothing in the app reads an audio file's
 length — that would mean decoding it. **Nothing checks an imported file's

@@ -68,6 +68,11 @@ abstract final class Notes {
   /// audio file's length, and the server works it out from the file itself.
   ///
   /// The caller owns the file. When this refuses, the caller deletes it.
+  ///
+  /// Length is deliberately not checked here. Too short is the recorder's to
+  /// decide, because it is the one that can drop the file before a note exists;
+  /// too long is stopped while recording, never by discarding audio afterwards.
+  /// An import has no duration to check either way.
   static ({Note? note, String? error, String? reason}) addAudio({
     required AudioSource source,
     required String ownerUid,
@@ -105,15 +110,6 @@ abstract final class Notes {
         error: recorded
             ? "That recording is too big to keep. Carry can't send it on."
             : 'That file is over ${Limits.uploadSize}. Pick a shorter one.',
-      );
-    }
-    if (duration != null && duration < Limits.shortest) {
-      return (
-        note: null,
-        reason: 'too_short',
-        error: recorded
-            ? 'Too short to save. Hold on a little longer.'
-            : 'That recording is too short to keep.',
       );
     }
     // The account changed while this was being recorded or picked: signed out,
