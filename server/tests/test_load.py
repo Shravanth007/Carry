@@ -299,7 +299,7 @@ def _store_talking_to(monkeypatch, answers: list) -> tuple[PostgresUsers, list[s
     return PostgresUsers(), statements
 
 
-ROW = ("ada", "ada@example.com", datetime(2026, 1, 1, tzinfo=UTC), False)
+ROW = ("ada", "ada@example.com", datetime(2026, 1, 1, tzinfo=UTC), False, "free", None)
 
 
 class TestSeenAgainstTheDatabase:
@@ -324,7 +324,7 @@ class TestSeenAgainstTheDatabase:
 
     def test_a_blocked_account_is_seen_on_the_read_path(self, monkeypatch):
         """Blocking has to take effect on the next call, not in five minutes."""
-        blocked = ("ada", "ada@example.com", ROW[2], True)
+        blocked = ("ada", "ada@example.com", ROW[2], True, "free", None)
         store, _ = _store_talking_to(monkeypatch, [ROW, blocked])
         store.seen("ada", "ada@example.com")
 
@@ -344,7 +344,7 @@ class TestSeenAgainstTheDatabase:
         assert statements[1].startswith("SELECT")
 
     def test_and_the_next_write_takes_it(self, monkeypatch):
-        renamed = ("ada", "new@example.com", ROW[2], False)
+        renamed = ("ada", "new@example.com", ROW[2], False, "free", None)
         store, statements = _store_talking_to(monkeypatch, [ROW, renamed])
         store.seen("ada", "ada@example.com")
         store._written.clear()  # noqa: SLF001 - stands in for the interval passing

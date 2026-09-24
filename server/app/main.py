@@ -7,7 +7,7 @@ from app.core import config  # loads .env before anything else reads env vars
 from app.middleware.body_size import BodySizeLimit
 from app.middleware.load import LoadShedder, ip_rate_limit
 from app.middleware.request_context import request_context
-from app.routes import health, users
+from app.routes import billing, health, users
 from app.services import db, firebase_auth
 from app.utils.logging import setup_logging
 
@@ -49,3 +49,4 @@ app.add_middleware(LoadShedder)
 app.middleware("http")(request_context)
 app.include_router(health.router)
 app.include_router(users.router)
+app.include_router(billing.router)

@@ -7,7 +7,7 @@ from typing import Protocol
 import psycopg
 
 from app.core import config
-from app.services import db
+from app.services import db, plans
 
 # How many checks between sweeps of accounts whose entry has expired.
 _SWEEP_EVERY = 500
@@ -25,6 +25,10 @@ class CarryUser:
     email: str | None
     created_at: datetime
     blocked: bool
+    #: 'free' or 'plus'. What they may do lives in `plans.py`, never here.
+    plan: str = plans.FREE
+    #: When the paid period ends. None on free.
+    plan_until: datetime | None = None
 
 
 class UserStore(Protocol):
@@ -131,12 +135,20 @@ class PostgresUsers:
             if claimed is not None:
                 self._release(uid, claimed)
             raise db.Unavailable(f"users.seen failed: {e}") from e
-        return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
+        return CarryUser(
+            uid=row[0],
+            email=row[1],
+            created_at=row[2],
+            blocked=row[3],
+            plan=row[4],
+            plan_until=row[5],
+        )
 
     def _read(self, uid: str) -> tuple | None:
         with db.connection() as conn:
             return conn.execute(
-                "SELECT uid, email, created_at, blocked FROM users WHERE uid = %s",
+                "SELECT uid, email, created_at, blocked, plan, plan_until"
+                " FROM users WHERE uid = %s",
                 (uid,),
             ).fetchone()
 
@@ -151,7 +163,7 @@ class PostgresUsers:
                         -- Keep the address current, but never wipe a known one
                         -- if a token arrives without it.
                         email = COALESCE(EXCLUDED.email, users.email)
-                RETURNING uid, email, created_at, blocked
+                RETURNING uid, email, created_at, blocked, plan, plan_until
                 """,
                 (uid, email),
             ).fetchone()

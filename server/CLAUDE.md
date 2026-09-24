@@ -9,7 +9,8 @@ server transcribes it with Groq Whisper, and it serves the notes back. The
 Flutter app lives in `../app` and has its own CLAUDE.md.
 
 **Stack:** Python 3.13, FastAPI, and Firebase Admin (sign-in checks).
-**Today:** `/health` (open) and `/me` (signed in). Both return a schema.
+**Today:** `/health` (open), `/me` (signed in) and `/billing/webhook` (the
+store's). Plans and quotas exist; nothing meters them yet.
 **Planned:** audio upload, transcription and a notes API.
 
 ## Docs
@@ -19,6 +20,7 @@ Flutter app lives in `../app` and has its own CLAUDE.md.
 | Auth: how tokens are checked, the service account key, error responses | [../app/docs/auth.md](../app/docs/auth.md) |
 | Trust model, limits, quotas, presigned uploads, secrets | [docs/security.md](docs/security.md) |
 | Staying up under a flood: what refuses what, in which order | [docs/load.md](docs/load.md) |
+| Plans, quotas, entitlements, and what the webhook may do | [../app/docs/payments.md](../app/docs/payments.md) |
 
 ## Structure
 
@@ -75,6 +77,12 @@ checks** gate is green.
   that takes a connection. See [docs/load.md](docs/load.md).
 - **Quotas before creation:** check an account's allowance before creating a
   row or signing an upload URL. A signed URL is storage already spent.
+  `usage.check()` is the call, and it belongs before the spending, never after.
+- **Money:** nothing here can charge anyone - Google takes the money and
+  RevenueCat reports it. What a bug in `billing.py` *can* do is give away
+  access or take away access someone paid for, so: only a verified event
+  changes a plan, every event applies at most once, arrival order means
+  nothing (the period does), and a refund is immediate.
 - **Secrets:** the service account key and Groq keys are read from environment
   variables or `.env`. `.env` and `secrets/` are git-ignored, and secrets never
   go in code.

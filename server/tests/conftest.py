@@ -5,8 +5,9 @@ from app.dependencies.auth import token_verifier
 from app.main import app
 from app.services import rate_limit as rate_limit_module
 from app.services.rate_limit import RateLimiter, limiter
+from app.services.usage import store as usage_store
 from app.services.users import store
-from tests.helpers import TestUsers, verify_test_token
+from tests.helpers import TestUsage, TestUsers, verify_test_token
 
 
 @pytest.fixture
@@ -36,10 +37,17 @@ def fresh_ip_limit():
 
 
 @pytest.fixture
-def client(users: TestUsers, rate: RateLimiter):
+def counted() -> TestUsage:
+    """What this test's accounts have spent."""
+    return TestUsage()
+
+
+@pytest.fixture
+def client(users: TestUsers, rate: RateLimiter, counted: TestUsage):
     """API client with test sign-in, test accounts and a fresh rate limit."""
     app.dependency_overrides[token_verifier] = lambda: verify_test_token
     app.dependency_overrides[store] = lambda: users
     app.dependency_overrides[limiter] = lambda: rate
+    app.dependency_overrides[usage_store] = lambda: counted
     yield TestClient(app)
     app.dependency_overrides.clear()
