@@ -18,6 +18,7 @@ Flutter app lives in `../app` and has its own CLAUDE.md.
 |---|---|
 | Auth: how tokens are checked, the service account key, error responses | [../app/docs/auth.md](../app/docs/auth.md) |
 | Trust model, limits, quotas, presigned uploads, secrets | [docs/security.md](docs/security.md) |
+| Staying up under a flood: what refuses what, in which order | [docs/load.md](docs/load.md) |
 
 ## Structure
 
@@ -68,6 +69,10 @@ checks** gate is green.
   `user.uid`. Never trust a user ID sent in the request body, a header or a
   path. The app is a public repo: anyone can write their own client, so every
   limit is enforced here, never in Flutter. See [docs/security.md](docs/security.md).
+- **Cheapest check first.** A request meets the load shedder, then the
+  per-address limit, then the body cap, and only then anything that needs the
+  database. A flood must be refused by a dictionary lookup, never by something
+  that takes a connection. See [docs/load.md](docs/load.md).
 - **Quotas before creation:** check an account's allowance before creating a
   row or signing an upload URL. A signed URL is storage already spent.
 - **Secrets:** the service account key and Groq keys are read from environment

@@ -77,6 +77,11 @@ a worker thread, so requests for one account really do arrive at the same
 moment; without the lock each of them sees room before any records its hit,
 and they all get through.
 
+**Limits that don't need an account** — the per-address rate limit and the
+load shedder — are in [load.md](load.md). Everything in this file is keyed on
+the account, which means none of it applies until a token has verified; those
+two are what stand in front of it.
+
 ## What a client that ignores the app's gates gets
 
 The Flutter app refuses a recording over an hour and a file over 25 MB. That
@@ -86,7 +91,9 @@ is a courtesy, and anyone can strip it out. Here is what they meet instead:
 |---|---|---|
 | No token, a forged one, another project's, an expired one | `401` | `401` |
 | A token for a blocked account | `403` | `403` |
-| More requests than the allowance | `429` + `Retry-After` | `429` + `Retry-After` |
+| More requests than the allowance, per account | `429` + `Retry-After` | `429` + `Retry-After` |
+| More requests than the allowance, per address | `429` + `Retry-After`, before the token is even read | same |
+| Arriving when the server is already full | `503` + `Retry-After` | same |
 | A body over `MAX_BODY_BYTES` | `413`, before the body is read | `413` |
 | Asking to upload a file over the cap | — | `413`, before anything is signed |
 | A file that turns out bigger than claimed | — | S3 refuses it: the presigned URL carries a content-length range |
