@@ -1,4 +1,5 @@
 import 'package:carry/auth/auth.dart';
+import 'package:carry/notes/notes.dart';
 import 'package:carry/auth/sign_in_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,29 @@ void main() {
     await tester.pump();
 
     expect(events.resets, 1);
+  });
+
+  testWidgets('a session ending on its own drops the notes with it', (
+    tester,
+  ) async {
+    final testAuth = await setUpTestAuth(signedIn: true);
+    Notes.addAudio(
+      source: AudioSource.recorded,
+      ownerUid: 'firebase-uid',
+      path: '/tmp/theirs.m4a',
+      bytes: 2048,
+    );
+    await pumpScreen(tester, gate);
+    await tester.pump();
+    expect(Notes.all.value, hasLength(1));
+
+    // Nobody tapped Sign out, so signOutAndForget never runs. If the list
+    // survives this, the next person to sign in opens Carry onto somebody
+    // else's recordings.
+    await testAuth.firebase.signOut();
+    await tester.pump();
+
+    expect(Notes.all.value, isEmpty);
   });
 
   testWidgets('shows the signed-in screen when signed in', (tester) async {
