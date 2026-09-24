@@ -152,11 +152,49 @@ void main() {
     });
 
     await openPlan(tester); // call 1 confirms plus
-    await tester.drag(find.text('Carry Plus').first, const Offset(0, 300));
+    await tester.fling(
+      find.byType(Scrollable).first,
+      const Offset(0, 400),
+      1000,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     await settle(tester); // call 2 fails
 
+    expect(call, 2, reason: 'the refresh must actually have run');
     expect(find.text('Carry Plus'), findsOneWidget);
     expect(find.text('₹199 / month'), findsNothing);
+  });
+
+  testWidgets('an older paid answer cannot override a newer free one', (
+    tester,
+  ) async {
+    // The other side of the same coin: letting a "confirmation" jump the
+    // queue would hide the buy button after a plan had actually expired.
+    var call = 0;
+    Api.client = MockClient((_) async {
+      call++;
+      return http.Response(
+        '{"uid":"firebase-uid","email":null,"since":"2026-01-01T00:00:00Z",'
+        '"plan":"${call == 1 ? 'plus' : 'free'}","plan_until":null,'
+        '"seconds_left":3600}',
+        200,
+      );
+    });
+
+    await openPlan(tester); // the first read says plus
+    await tester.fling(
+      find.byType(Scrollable).first,
+      const Offset(0, 400),
+      1000,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await settle(tester); // a newer read says free
+
+    expect(call, 2, reason: 'the refresh must actually have run');
+    expect(find.text('Free'), findsOneWidget);
+    expect(find.text('₹199 / month'), findsOneWidget);
   });
 
   testWidgets('it says what a plan does not do', (tester) async {
