@@ -42,6 +42,13 @@ class _PlanScreenState extends State<PlanScreen> {
   /// True when a purchase went through but the server hasn't heard yet.
   bool _justBought = false;
 
+  /// Which read of the plan is the current one.
+  ///
+  /// A pull-to-refresh can overlap the read that follows a purchase. Without
+  /// this the slower answer wins, and an older "free" can replace a confirmed
+  /// "plus" - putting the buy button back in front of somebody who just paid.
+  int _read = 0;
+
   bool get _isPreview =>
       widget.previewUser != null || widget.previewProblem != null;
 
@@ -63,9 +70,11 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _load() async {
+    final mine = ++_read;
     final account = await Billing.fromServer();
     final offers = await Billing.offers();
-    if (!mounted) return;
+    // A newer read has already answered: this one is stale news.
+    if (!mounted || mine != _read) return;
     setState(() {
       _account = account;
       _offers = offers;
@@ -158,6 +167,7 @@ class _PlanScreenState extends State<PlanScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ScrollableColumn(
+                alwaysScrollable: true, // the refresh needs a drag to start
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 children: [
                   _Current(account: _account),

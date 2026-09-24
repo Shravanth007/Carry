@@ -132,6 +132,53 @@ void main() {
     });
   });
 
+  group('buying needs an identity the store accepted', () {
+    test('a store that refuses the uid refuses the purchase', () async {
+      // The alternative is a purchase under whoever the store thinks it is -
+      // anonymous, or the last person on this phone. The server credits by
+      // uid, so that money reaches nobody.
+      store.refuseIdentity = true;
+      await Billing.identify(Auth.currentUser!.uid);
+
+      final trouble = await Billing.buy(store.selling.single);
+
+      expect(trouble, contains("couldn't confirm your account"));
+      expect(store.purchases, 0);
+    });
+
+    test('and says so for restoring too', () async {
+      store.refuseIdentity = true;
+      await Billing.identify(Auth.currentUser!.uid);
+
+      expect(await Billing.restore(), contains("couldn't confirm"));
+      expect(store.restores, 0);
+    });
+
+    test('an identity the store took lets buying through', () async {
+      await Billing.identify(Auth.currentUser!.uid);
+
+      expect(await Billing.buy(store.selling.single), isNull);
+      expect(store.purchases, 1);
+    });
+
+    test('signed out, nothing is bought', () async {
+      Auth.firebaseForTesting = MockFirebaseAuth();
+
+      expect(await Billing.buy(store.selling.single), 'Sign in first.');
+      expect(store.purchases, 0);
+    });
+
+    test(
+      'a signed-in person the store never heard of is identified first',
+      () async {
+        // Nobody called identify - the app was opened straight onto the plan
+        // screen after a restart.
+        expect(await Billing.buy(store.selling.single), isNull);
+        expect(store.identified, [Auth.currentUser!.uid]);
+      },
+    );
+  });
+
   group('identity', () {
     test('purchases are tied to the Firebase uid', () async {
       await Billing.identify('ada');

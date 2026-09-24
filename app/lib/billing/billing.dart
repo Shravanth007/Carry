@@ -4,6 +4,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../analytics/analytics.dart';
 import '../api/api.dart';
+import '../auth/auth.dart';
 
 /// What Carry sells. The server decides which one an account is on.
 enum Plan {
@@ -88,6 +89,14 @@ abstract final class Billing {
   /// null and making the future where it is awaited keeps that impossible.
   static Future<void>? _identity;
 
+  /// Who the store last accepted, or null if it refused or was never told.
+  ///
+  /// A failed `logIn` used to be logged and forgotten, which left buying to go
+  /// ahead under whoever the store thought it was - anonymous, or the last
+  /// person on this phone. The server credits by uid, so that purchase would
+  /// reach nobody.
+  static String? _identifiedAs;
+
   static Future<void> _queue(Future<void> Function() change) {
     final next = settled().then((_) => change()).catchError((Object e) {
       debugPrint('Store identity: $e');
@@ -108,6 +117,7 @@ abstract final class Billing {
   static void resetForTesting() {
     store = const DemoStore();
     _identity = null;
+    _identifiedAs = null;
   }
 
   /// True when real money can change hands.
@@ -134,9 +144,15 @@ abstract final class Billing {
   /// It has to be the Firebase uid: the webhook tells the server which
   /// account changed by that id, and an account that bought under a different
   /// one is an account the server can't credit.
-  static Future<void> identify(String uid) => _queue(() => store.identify(uid));
+  static Future<void> identify(String uid) => _queue(() async {
+    await store.identify(uid);
+    _identifiedAs = uid;
+  });
 
-  static Future<void> forget() => _queue(store.forget);
+  static Future<void> forget() => _queue(() async {
+    await store.forget();
+    _identifiedAs = null;
+  });
 
   static Future<List<Offer>> offers() async {
     try {
@@ -148,8 +164,10 @@ abstract final class Billing {
   }
 
   static Future<String?> buy(Offer offer) async {
-    // Whoever is signed in now is who this is bought for.
-    await settled();
+    // Whoever is signed in now is who this is bought for, and the store has to
+    // agree about that before any money moves.
+    final refusal = await _readyToBuy();
+    if (refusal != null) return refusal;
     Analytics.event('upgrade_started', {'offer': offer.id});
     final trouble = await store.buy(offer);
     Analytics.event(
@@ -164,9 +182,25 @@ abstract final class Billing {
   }
 
   static Future<String?> restore() async {
-    await settled();
+    final refusal = await _readyToBuy();
+    if (refusal != null) return refusal;
     Analytics.event('restore_used');
     return store.restore();
+  }
+
+  /// Makes sure the store knows who is buying, and says so if it can't.
+  ///
+  /// Refusing is the right answer. A purchase made under the wrong identity
+  /// takes real money and reaches no account, and there is nothing the person
+  /// could do about it afterwards.
+  static Future<String?> _readyToBuy() async {
+    await settled();
+    final uid = Auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return 'Sign in first.';
+    if (_identifiedAs == uid) return null;
+    await identify(uid);
+    if (_identifiedAs == uid) return null;
+    return "Carry couldn't confirm your account with the store. Try again.";
   }
 
   /// What the server says this account may do.

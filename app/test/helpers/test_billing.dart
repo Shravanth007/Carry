@@ -17,6 +17,15 @@ class TestStore implements PurchaseStore {
   Object? failOnOffers;
 
   final identified = <String>[];
+
+  /// Set to make the store refuse who is signed in, as RevenueCat does when
+  /// logIn fails.
+  bool refuseIdentity = false;
+
+  /// Set to make buying throw rather than answer - a store adapter meeting
+  /// something it doesn't handle.
+  bool throwOnBuy = false;
+
   int forgets = 0;
   int purchases = 0;
   int restores = 0;
@@ -25,7 +34,10 @@ class TestStore implements PurchaseStore {
   Future<void> start(String key) async {}
 
   @override
-  Future<void> identify(String uid) async => identified.add(uid);
+  Future<void> identify(String uid) async {
+    if (refuseIdentity) throw StateError('the store would not take that uid');
+    identified.add(uid);
+  }
 
   @override
   Future<void> forget() async => forgets++;
