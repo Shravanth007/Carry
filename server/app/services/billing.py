@@ -272,7 +272,12 @@ def _transfer(conn, event: Event) -> None:
     grant, which stays put.
     """
     if not event.from_uid or not event.to_uid:
-        log.warning("transfer %s is missing an account", event.id)
+        # Either a side named nobody we know, or it named two accounts and
+        # there was no way to choose. Both mean paid access may now be sitting
+        # on the wrong account, and neither is something a redelivery of the
+        # same payload would fix, so it goes on the list for a person.
+        log.warning("transfer %s does not name one account on each side", event.id)
+        _flag(conn, event.id, "transfer did not name one account on each side")
         return
     row = conn.execute(
         "SELECT plan, plan_until, plan_source FROM users WHERE uid = %s FOR UPDATE",
@@ -312,6 +317,18 @@ def _transfer(conn, event: Event) -> None:
     )
     _grant(conn, event.to_uid, until)
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
+
+
+def _flag(conn, event_id: str, problem: str) -> None:
+    """Leaves a note on the ledger row for a human to find.
+
+    Same transaction as everything else, so the note and the event arrive
+    together. See the `problem` column in db.py for how to read the list.
+    """
+    conn.execute(
+        "UPDATE billing_events SET problem = %s WHERE event_id = %s",
+        (problem, event_id),
+    )
 
 
 def _text(value) -> str | None:

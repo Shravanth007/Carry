@@ -127,6 +127,7 @@ class FakeDatabase:
     def __init__(self, accounts: dict[str, dict] | None = None):
         self.accounts = accounts or {}
         self.events: set[str] = set()
+        self.problems: dict[str, str] = {}
         self.statements: list[str] = []
 
     # -- what the code calls ------------------------------------------------
@@ -139,6 +140,9 @@ class FakeDatabase:
                 return _FakeCursor(None)  # the primary key refused it
             self.events.add(event_id)
             return _FakeCursor((event_id,))
+        if flat.startswith("UPDATE billing_events SET problem"):
+            self.problems[params[1]] = params[0]
+            return _FakeCursor(None)
         if flat.startswith("INSERT INTO users"):
             self._upsert(params)
             return _FakeCursor(None)
@@ -610,6 +614,32 @@ class TestTransfer:
         assert db.accounts["ada"]["plan"] == plans.PLUS
         assert db.accounts["grace"]["plan"] == plans.FREE
         assert db.accounts["hopper"]["plan"] == plans.FREE
+
+    def test_a_transfer_we_cannot_read_is_left_for_a_person(self, database):
+        """Acknowledging is right - the store would only redeliver the same
+        payload - but paid access may now be on the wrong account, so it goes
+        on the list somebody can actually query."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        assert billing.apply(
+            billing.read(
+                event(
+                    event_id="t11",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from="ada",
+                    transferred_to=["grace", "hopper"],
+                )
+            )
+        )
+
+        assert "one account on each side" in db.problems["t11"]
+        assert db.accounts["ada"]["plan"] == plans.PLUS  # nothing was lost
 
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and

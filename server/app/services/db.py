@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS billing_events (
     kind         TEXT NOT NULL,
     received_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Why an event we accepted changed nothing, when that needs a person.
+--
+-- Acknowledging is the right answer to the store - it would redeliver the
+-- same payload and get the same result - but it must not be silent. This is
+-- the queue of events to look at by hand:
+--
+--   SELECT event_id, kind, received_at, problem
+--     FROM billing_events WHERE problem IS NOT NULL ORDER BY received_at;
+ALTER TABLE billing_events ADD COLUMN IF NOT EXISTS problem TEXT;
 """
 
 
