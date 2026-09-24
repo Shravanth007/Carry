@@ -143,11 +143,17 @@ In rough order of how much they help:
 
 ## If it is happening right now
 
-1. **Look at the logs.** `carry.load` logs a line **per address** every few
-   seconds, carrying how many more it suppressed, so the addresses doing it are
-   named rather than just the fact that something is. `carry.request` has one
-   line per request with its ID; `carry.auth` has account-level refusals and
-   database trouble.
+1. **Look at the logs.**
+   - **Rate limiting** names the address: `carry.load` logs a line per address
+     every few seconds with how many more it suppressed. That is the address to
+     block.
+   - **Shedding does not.** It logs the path and the in-flight count, because
+     being full is a statement about the server, not about a caller — by then
+     everyone is being refused, not one offender. If you need to know who
+     during an overload, the addresses come from the edge or the host, not from
+     here.
+   - `carry.request` has one line per request with its ID; `carry.auth` has
+     account-level refusals and database trouble.
 2. **Is it one account?** Block it, and their next call gets `403`:
    ```sql
    UPDATE users SET blocked = true WHERE uid = '<the uid>';
