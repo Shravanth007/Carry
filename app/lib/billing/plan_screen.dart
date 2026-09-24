@@ -73,8 +73,13 @@ class _PlanScreenState extends State<PlanScreen> {
     final mine = ++_read;
     final account = await Billing.fromServer();
     final offers = await Billing.offers();
-    // A newer read has already answered: this one is stale news.
-    if (!mounted || mine != _read) return;
+    if (!mounted) return;
+    // A newer read has already answered, so this one is stale news - unless it
+    // is the server confirming the plan. That answer is never stale in a way
+    // that matters: a refresh that fails afterwards would otherwise put the
+    // buy button back in front of somebody whose purchase has just landed.
+    final confirmsPaid = account?.plan == 'plus';
+    if (mine != _read && !confirmsPaid) return;
     setState(() {
       _account = account;
       _offers = offers;

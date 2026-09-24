@@ -133,6 +133,32 @@ void main() {
     expect(find.textContaining('No earlier purchase'), findsOneWidget);
   });
 
+  testWidgets('a confirmed purchase survives a refresh that fails after it', (
+    tester,
+  ) async {
+    // Pull to refresh while the post-purchase read is in flight: the refresh
+    // fails, the purchase read confirms Plus. Showing "unknown" and the buy
+    // button to somebody the server has just confirmed is the worst outcome
+    // of the two.
+    var call = 0;
+    Api.client = MockClient((_) async {
+      call++;
+      if (call == 2) throw http.ClientException('offline');
+      return http.Response(
+        '{"uid":"firebase-uid","email":null,"since":"2026-01-01T00:00:00Z",'
+        '"plan":"plus","plan_until":null,"seconds_left":71000}',
+        200,
+      );
+    });
+
+    await openPlan(tester); // call 1 confirms plus
+    await tester.drag(find.text('Carry Plus').first, const Offset(0, 300));
+    await settle(tester); // call 2 fails
+
+    expect(find.text('Carry Plus'), findsOneWidget);
+    expect(find.text('₹199 / month'), findsNothing);
+  });
+
   testWidgets('it says what a plan does not do', (tester) async {
     serverSays();
 
