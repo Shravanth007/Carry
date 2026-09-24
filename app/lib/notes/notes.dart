@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../auth/auth.dart';
 import '../limits.dart';
 
 /// Where a note's audio came from.
@@ -60,13 +61,14 @@ abstract final class Notes {
   /// and an owner — so two sets of rules on this side would mean one of them
   /// was wrong.
   ///
-  /// Returns the note, or a sentence to show the person. Takes plain values
+  /// Returns the note, or a sentence to show the person and a [reason] code
+  /// for the event. Takes plain values
   /// rather than the recorder's own type, so notes and recording don't depend
   /// on each other. [duration] is null for an import: nothing here reads an
   /// audio file's length, and the server works it out from the file itself.
   ///
   /// The caller owns the file. When this refuses, the caller deletes it.
-  static ({Note? note, String? error}) addAudio({
+  static ({Note? note, String? error, String? reason}) addAudio({
     required AudioSource source,
     required String ownerUid,
     required String path,
@@ -81,6 +83,7 @@ abstract final class Notes {
     if (ownerUid.isEmpty) {
       return (
         note: null,
+        reason: 'no_owner',
         error: recorded
             ? 'Sign in to record.'
             : 'Sign in to import a recording.',
@@ -89,6 +92,7 @@ abstract final class Notes {
     if (bytes <= 0) {
       return (
         note: null,
+        reason: 'empty',
         error: recorded
             ? 'Too short to save. Hold on a little longer.'
             : 'That file is empty. Pick another recording.',
@@ -97,6 +101,7 @@ abstract final class Notes {
     if (bytes > Limits.uploadBytes) {
       return (
         note: null,
+        reason: 'too_large',
         error: recorded
             ? "That recording is too big to keep. Carry can't send it on."
             : 'That file is over ${Limits.uploadSize}. Pick a shorter one.',
@@ -105,15 +110,27 @@ abstract final class Notes {
     if (duration != null && duration < Limits.shortest) {
       return (
         note: null,
+        reason: 'too_short',
         error: recorded
             ? 'Too short to save. Hold on a little longer.'
             : 'That recording is too short to keep.',
       );
     }
-    if (duration != null && duration > Limits.recording) {
+    // The account changed while this was being recorded or picked: signed out,
+    // or a different person signed in. Keeping it would put one person's audio
+    // in another's list, so it goes no further.
+    //
+    // Deliberately not a limit from [Limits]: it is about who is here, and it
+    // is the last thing checked because it is the most likely to have changed
+    // while the work was happening.
+    if (ownerUid != Auth.currentUser?.uid) {
       return (
         note: null,
-        error: 'That is longer than Carry can keep in one note.',
+        reason: 'account_changed',
+        error: recorded
+            ? "That recording wasn't saved: the account changed while it "
+                  'was running.'
+            : "That import wasn't kept: the account changed.",
       );
     }
 
@@ -128,7 +145,7 @@ abstract final class Notes {
       bytes: bytes,
     );
     _add(note);
-    return (note: note, error: null);
+    return (note: note, error: null, reason: null);
   }
 
   static String _recordedAt(DateTime when) {

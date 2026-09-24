@@ -196,7 +196,7 @@ Future<ImportResult> importAudio() async {
   if (refused != null) {
     _deletePartial(kept); // nothing keeps a file no note points at
     Analytics.event('import_rejected', {
-      'reason': 'refused',
+      'reason': result.reason,
       'extension': _reportable(extension),
       'size': Analytics.sizeBucket(bytes),
     });

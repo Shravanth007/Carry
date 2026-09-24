@@ -177,7 +177,12 @@ void main() {
 
       await Recording.finish();
 
-      expect(events.has('recording_dropped_account_changed'), isTrue);
+      // One event for a refusal, whatever the reason, so a recording and an
+      // import read the same way in the funnel.
+      expect(
+        events.only('recording_refused').properties['reason'],
+        'account_changed',
+      );
       expect(events.has('recording_saved'), isFalse);
     });
   });

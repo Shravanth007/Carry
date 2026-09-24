@@ -7,6 +7,7 @@ import 'package:carry/notes/notes.dart';
 import 'package:carry/permissions/permissions.dart';
 import 'package:carry/recording/recorder.dart';
 import 'package:carry/recording/recording.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_analytics.dart';
@@ -108,6 +109,46 @@ void main() {
       expect(recorded.note, isNull);
       expect(Notes.all.value, isEmpty);
     });
+  });
+
+  testWidgets('an hour-long recording is kept, not thrown away', (
+    tester,
+  ) async {
+    // The bar saves when elapsed reaches the cap, and its ticker runs every
+    // 200ms, so a recording is always a shade past the cap by the time it is
+    // written. Refusing it there would delete an hour of someone's voice.
+    Recorder.clockForTesting = () => tester.binding.clock.now();
+    await Recording.begin();
+    await tester.pump(Limits.recording + const Duration(milliseconds: 200));
+
+    final result = await Recording.finish(stoppedBy: 'length_limit');
+
+    expect(result.message, isNull, reason: 'an hour of audio must not be lost');
+    expect(Notes.all.value, hasLength(1));
+    expect(File(Notes.all.value.single.path).existsSync(), isTrue);
+  });
+
+  testWidgets('an import is refused when the account changed mid-way', (
+    tester,
+  ) async {
+    picker.pick = testFile('Standup.m4a', bytes: 2048);
+    final imports = Directory.systemTemp.createTempSync('carry_mid_import');
+    addTearDown(() => imports.deleteSync(recursive: true));
+    // Someone else signs in between the picker closing and the file being
+    // kept - a revoked session, or another account on the same phone.
+    importFolderForTesting = () async {
+      Auth.firebaseForTesting = MockFirebaseAuth(signedIn: true);
+      return imports;
+    };
+    addTearDown(() => importFolderForTesting = null);
+
+    final result = (await tester.runAsync(importAudio))!;
+
+    expect(result.note, isNull);
+    expect(result.error, contains('the account changed'));
+    expect(Notes.all.value, isEmpty);
+    // The copy it had already made is gone, not left for nobody.
+    expect(imports.listSync(), isEmpty);
   });
 
   testWidgets('a recording too big to send is dropped, not half kept', (

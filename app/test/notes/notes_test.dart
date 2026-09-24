@@ -1,8 +1,15 @@
 import 'package:carry/notes/notes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../helpers/test_auth.dart';
+
 void main() {
-  setUp(Notes.clear);
+  // A note can only be made for the account that is signed in, so these run
+  // as one - the default test account's uid is 'firebase-uid'.
+  setUp(() async {
+    await setUpTestAuth(signedIn: true);
+    Notes.clear();
+  });
 
   /// A note the way the app makes one: through the single gate.
   Note keep(String title) => Notes.addAudio(

@@ -7,8 +7,12 @@
 /// numbers are checked again on the server, from the token and from the file
 /// it receives — `server/docs/security.md` is where the real ones live.
 abstract final class Limits {
-  /// The longest one piece of audio may be. About 14 MB at our bitrate,
-  /// comfortably under [uploadBytes].
+  /// The longest a recording may run. The bar stops and saves at this, and
+  /// the server checks it again from the file. It is deliberately **not** a
+  /// reason to throw audio away afterwards: a recording stopped at the cap is
+  /// always a shade past it by the time it is written, and deleting an hour of
+  /// someone's voice over a few milliseconds would be the worst answer
+  /// available. About 14 MB at our bitrate, comfortably under [uploadBytes].
   static const recording = Duration(hours: 1);
 
   /// Anything shorter than this is a mis-tap, not a note.
