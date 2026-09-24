@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../limits.dart';
+
 /// Speech, not music: mono at 32 kbps keeps an hour of audio near 14 MB,
 /// which is under the transcriber's 25 MB limit and cheap to upload.
 /// 16 kHz is what the transcriber resamples to anyway.
@@ -105,9 +107,6 @@ abstract final class Recorder {
     return since == null ? _before : _before + _now.difference(since);
   }
 
-  /// Anything shorter is a mis-tap, not a note.
-  static const shortest = Duration(seconds: 1);
-
   static Future<Directory> _folder() async {
     final folder = folderForTesting != null
         ? await folderForTesting!()
@@ -203,7 +202,7 @@ abstract final class Recorder {
     // never completes inside a widget test's fake clock.
     final bytes = file.existsSync() ? file.lengthSync() : 0;
     // An empty or barely-there file is a mis-tap or a refused microphone.
-    if (bytes == 0 || duration < shortest) {
+    if (bytes == 0 || duration < Limits.shortest) {
       _delete(path);
       return null;
     }

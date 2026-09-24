@@ -156,12 +156,25 @@ abstract final class Recording {
       );
     }
 
-    Notes.addRecorded(
+    // The same gate an import goes through, so both are kept or refused for
+    // the same reasons.
+    final kept = Notes.addAudio(
+      source: AudioSource.recorded,
       ownerUid: owner,
       path: finished.path,
       duration: finished.duration,
       bytes: finished.bytes,
     );
+    final refused = kept.error;
+    if (refused != null) {
+      Recorder.deleteFile(finished.path);
+      Analytics.event('recording_refused', {
+        'seconds': finished.duration.inSeconds,
+        'size': Analytics.sizeBucket(finished.bytes),
+      });
+      return (message: refused, stillRecording: false);
+    }
+
     Analytics.event('recording_saved', {
       'seconds': finished.duration.inSeconds,
       'size': Analytics.sizeBucket(finished.bytes),

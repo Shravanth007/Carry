@@ -75,6 +75,8 @@ compiles against SDK 37, which the Android SDK currently publishes only as
   The one exception is `AvatarCache`, which downloads a Google profile
   picture: another host, no Carry token.
 - Features don't reach into each other.
+- Audio becomes a note in one place, `Notes.addAudio`. A recording and an
+  import are the same thing to the server, so they follow the same rules here.
 - Numbers the server also enforces live in `lib/limits.dart`, never inline in
   a screen. The app's copy is there to answer quickly; the server's is the one
   that decides.

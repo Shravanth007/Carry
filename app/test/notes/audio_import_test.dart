@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:carry/limits.dart';
 import 'package:carry/notes/audio_import.dart';
+import 'package:carry/auth/auth.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../helpers/test_auth.dart';
 import '../helpers/test_files.dart';
 
 void main() {
@@ -13,10 +15,24 @@ void main() {
 
   late Directory imports;
 
-  setUp(() {
+  setUp(() async {
     picker = setUpTestFilePicker();
     imports = setUpTestImportFolder();
+    await setUpTestAuth(signedIn: true);
     Notes.clear();
+  });
+
+  test('signed out, nothing is even picked', () async {
+    await Auth.signOut();
+    picker.pick = testFile('Standup.m4a');
+
+    final result = await importAudio();
+
+    expect(result.error, 'Sign in to import a recording.');
+    expect(result.note, isNull);
+    // Refused before the picker opens, so nobody chooses a file for nothing.
+    expect(picker.opens, 0);
+    expect(Notes.all.value, isEmpty);
   });
 
   test('adds the picked recording as a note', () async {

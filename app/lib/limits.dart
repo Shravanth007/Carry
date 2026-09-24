@@ -7,8 +7,12 @@
 /// numbers are checked again on the server, from the token and from the file
 /// it receives — `server/docs/security.md` is where the real ones live.
 abstract final class Limits {
-  /// One recording. About 14 MB at our bitrate, comfortably under [uploadBytes].
+  /// The longest one piece of audio may be. About 14 MB at our bitrate,
+  /// comfortably under [uploadBytes].
   static const recording = Duration(hours: 1);
+
+  /// Anything shorter than this is a mis-tap, not a note.
+  static const shortest = Duration(seconds: 1);
 
   /// One file, recorded or imported. The transcriber refuses anything bigger,
   /// so there is no point carrying it across the network first.

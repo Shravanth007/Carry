@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:carry/limits.dart';
 import 'package:carry/recording/recorder.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,7 +32,7 @@ void main() {
   test('stopping keeps the file, its length and its size', () async {
     await Recorder.start();
     await Future<void>.delayed(
-      Recorder.shortest + const Duration(milliseconds: 50),
+      Limits.shortest + const Duration(milliseconds: 50),
     );
 
     final finished = await Recorder.stop();
@@ -39,7 +40,7 @@ void main() {
     expect(finished, isNotNull);
     expect(File(finished!.path).existsSync(), isTrue);
     expect(finished.bytes, microphone.bytes);
-    expect(finished.duration, greaterThanOrEqualTo(Recorder.shortest));
+    expect(finished.duration, greaterThanOrEqualTo(Limits.shortest));
     expect(Recorder.isRecording, isFalse);
   });
 
@@ -57,7 +58,7 @@ void main() {
     microphone.bytes = 0;
     await Recorder.start();
     await Future<void>.delayed(
-      Recorder.shortest + const Duration(milliseconds: 50),
+      Limits.shortest + const Duration(milliseconds: 50),
     );
 
     expect(await Recorder.stop(), isNull);

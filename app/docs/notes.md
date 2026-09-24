@@ -96,6 +96,37 @@ Home shows these in a snackbar. A refused file adds nothing.
 a bigger one across the network would only end in a failure later. The number
 lives in `lib/limits.dart` with the recording cap, not here.
 
+## One flow for recorded and imported audio
+
+By the time audio is a note, where it came from stops mattering: the server
+only ever sees a file and an owner, and it applies the same rules to both. So
+the app does too — **`Notes.addAudio` is the one place audio becomes a note**,
+and both `Recording.finish()` and `importAudio()` end there.
+
+It holds either kind to the same rules:
+
+| Rule | Recorded | Imported |
+|---|---|---|
+| Must have an owner uid | refused before the microphone | refused before the picker |
+| Not empty | yes | yes |
+| Not over `Limits.uploadBytes` | yes | checked before the copy too, so a big file isn't copied first |
+| Not under `Limits.shortest` | yes | duration unknown, so not checked here |
+| Not over `Limits.recording` | yes, and the bar saves at the cap | duration unknown, so not checked here |
+
+**An import brings no duration.** Nothing in the app reads an audio file's
+length — that would mean decoding it — so the server works it out from the file
+and applies the duration limits itself. That is the one asymmetry, and it is
+the server's to close, not the app's.
+
+The wording differs where it has to: "Hold on a little longer" is no use to
+someone who picked a file, and "pick a shorter one" is no use to someone who
+was talking. `AudioSource` picks the sentence; nothing else branches on it.
+
+**There is no `Notes.owner`.** Both callers pass the uid they captured — the
+recorder captures it when recording starts, the importer before the picker
+opens — so a note can never be stamped with whoever happens to be signed in
+when the work finishes.
+
 ## Limits
 
 `lib/limits.dart` holds both caps the app checks:

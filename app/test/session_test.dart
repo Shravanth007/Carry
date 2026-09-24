@@ -19,14 +19,12 @@ void main() {
 
   test('signing out leaves nothing of the person behind', () async {
     await AvatarCache.load('https://example.com/ada.jpg');
-    Notes.add(
-      Note(
-        id: '1',
-        ownerUid: 'firebase-uid',
-        title: 'Private thought',
-        path: '/phone/1.m4a',
-        addedAt: DateTime.now(),
-      ),
+    Notes.addAudio(
+      source: AudioSource.imported,
+      ownerUid: 'firebase-uid',
+      path: '/phone/1.m4a',
+      bytes: 2048,
+      title: 'Private thought',
     );
 
     await signOutAndForget();
@@ -51,14 +49,12 @@ void main() {
   });
 
   test('a failed sign-out keeps the data', () async {
-    Notes.add(
-      Note(
-        id: '1',
-        ownerUid: 'firebase-uid',
-        title: 'Still mine',
-        path: '/phone/1.m4a',
-        addedAt: DateTime.now(),
-      ),
+    Notes.addAudio(
+      source: AudioSource.imported,
+      ownerUid: 'firebase-uid',
+      path: '/phone/1.m4a',
+      bytes: 2048,
+      title: 'Still mine',
     );
     failNextSignOut(testAuth);
 

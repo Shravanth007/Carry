@@ -183,6 +183,11 @@ void main() {
   });
 
   group('importing', () {
+    setUp(() async {
+      setUpTestImportFolder();
+      await setUpTestAuth(signedIn: true);
+    });
+
     test(
       'a rejected file says why, with its type but never its name',
       () async {
