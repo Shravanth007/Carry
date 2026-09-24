@@ -98,6 +98,10 @@ def read(payload: dict) -> Event:
     Anything missing is a refusal, not a guess: an event we can't read is an
     event we must not act on.
     """
+    if not isinstance(payload, dict):
+        # Valid JSON, but a list or a bare string. `.get` on one of those is an
+        # AttributeError, which is a 500 - and this is a refusal, not a bug.
+        raise ValueError("payload is not an object")
     event = payload.get("event")
     if not isinstance(event, dict):
         raise ValueError("no event in the payload")

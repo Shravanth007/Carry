@@ -29,7 +29,15 @@ async def webhook(
         log.error("%s", e)
         raise HTTPException(503, "Billing isn't set up on this server.") from None
 
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError:
+        # A body that isn't JSON at all: a truncated delivery, or somebody
+        # poking at an endpoint they have the secret for. Either way it is a
+        # 400 we chose, not a 500 that says the server broke.
+        log.warning("billing webhook body was not JSON")
+        raise HTTPException(400, "That isn't an event we can read.") from None
+
     try:
         event = billing.read(payload)
     except ValueError as e:

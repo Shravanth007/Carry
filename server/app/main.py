@@ -29,12 +29,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Carry", lifespan=lifespan)
-# Starlette runs the LAST registered middleware outermost, so request_context
-# wraps everything: a refused request still gets an ID and an access log line,
-# which is exactly what you want when someone is probing. The body cap still
-# runs before the route, and nothing between the two reads the body.
 # Starlette runs the LAST registered middleware outermost, so this list reads
-# inside-out. What ends up happening to a request, in order:
+# inside-out, and request_context ends up wrapping everything: a refused
+# request still gets an ID and an access log line, which is exactly what you
+# want when someone is probing. What ends up happening to a request, in order:
 #
 #   request_context  gives it an ID and logs it, so even a refusal is findable
 #   LoadShedder      refuses at once if the server is already full

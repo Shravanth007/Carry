@@ -97,6 +97,8 @@ class TestReadingTheEvent:
         "payload",
         [
             {},
+            [],  # valid JSON, but not an object
+            "an event, honest",
             {"event": None},
             {"event": {"type": "RENEWAL"}},  # no id
             {"event": {"id": "e"}},  # no type
@@ -730,6 +732,33 @@ class TestTheEndpoint:
 
         res = client.post(
             "/billing/webhook", json={"hello": True}, headers={"Authorization": SECRET}
+        )
+
+        assert res.status_code == 400
+
+    def test_a_body_that_is_not_json_at_all_is_a_400(self, client, monkeypatch):
+        """A truncated delivery, or somebody poking at the endpoint. Without a
+        status we chose, `request.json()` raises and it is a 500 that reads
+        like Carry broke."""
+        monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", SECRET)
+
+        res = client.post(
+            "/billing/webhook",
+            content=b"not json at all",
+            headers={"Authorization": SECRET, "Content-Type": "application/json"},
+        )
+
+        assert res.status_code == 400
+
+    def test_a_body_that_is_json_but_not_an_object_is_a_400(
+        self, client, monkeypatch
+    ):
+        """`[].get("event")` is an AttributeError, and an unhandled one is a
+        500."""
+        monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", SECRET)
+
+        res = client.post(
+            "/billing/webhook", json=["nope"], headers={"Authorization": SECRET}
         )
 
         assert res.status_code == 400
