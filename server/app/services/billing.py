@@ -279,28 +279,28 @@ def _transfer(conn, event: Event) -> None:
     if row is None or row[0] == plans.FREE:
         log.info("transfer %s: nothing to move", event.id)
         return
-    if row[2] != "play":
-        log.info("transfer %s: %s was granted by hand, leaving it", event.id, row[0])
-        return
-    conn.execute(
-        "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
-        " WHERE uid = %s",
-        (plans.FREE, event.from_uid),
-    )
-    conn.execute(
-        """
-        INSERT INTO users (uid, plan, plan_source, plan_until)
-        VALUES (%s, %s, 'play', %s)
-        ON CONFLICT (uid) DO UPDATE
-            SET plan = EXCLUDED.plan,
-                plan_source = 'play',
-                plan_until = GREATEST(
-                    EXCLUDED.plan_until,
-                    COALESCE(users.plan_until, EXCLUDED.plan_until)
-                )
-        """,
-        (event.to_uid, row[0], row[1]),
-    )
+    # Only a plan the store paid for is the store's to take away. A plan we
+    # granted by hand isn't the subscription being transferred, so it stays -
+    # but the destination is still given the subscription, because dropping it
+    # would lose paid access that cannot be replayed.
+    if row[2] == "play":
+        conn.execute(
+            "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
+            " WHERE uid = %s",
+            (plans.FREE, event.from_uid),
+        )
+    else:
+        log.info(
+            "transfer %s: %s on %s was granted by hand, leaving it",
+            event.id,
+            row[0],
+            event.from_uid,
+        )
+
+    # The event's own period if it carries one, otherwise what the source held.
+    # _grant applies the same rules as any other grant: nothing undated, and
+    # nothing for a period that has already ended.
+    _grant(conn, event.to_uid, event.period_end or row[1])
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 
 

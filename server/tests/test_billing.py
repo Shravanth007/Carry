@@ -434,7 +434,11 @@ class TestTransfer:
         second Google login."""
         db = database(
             {
-                "ada": {"plan": plans.PLUS, "plan_until": None, "source": "granted"},
+                "ada": {
+                    "plan": plans.PLUS,
+                    "plan_until": LATER,
+                    "source": "granted",
+                },
                 "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
             }
         )
@@ -451,8 +455,40 @@ class TestTransfer:
             )
         )
 
+        # The manual grant stays where it was...
         assert db.accounts["ada"]["plan"] == plans.PLUS
-        assert db.accounts["grace"]["plan"] == plans.FREE
+        # ...and the subscription still reaches the account it moved to.
+        # Dropping it would lose paid access that cannot be replayed.
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+
+    def test_a_transfer_with_its_own_period_uses_it(self, database):
+        """The event knows when the subscription runs to; the source row might
+        be holding an older date, or a hand-granted one with no date at all."""
+        db = database(
+            {
+                "ada": {
+                    "plan": plans.PLUS,
+                    "plan_until": SOONER,
+                    "source": "play",
+                },
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t6",
+                    kind="TRANSFER",
+                    uid=None,
+                    ends=LATER,
+                    transferred_from="ada",
+                    transferred_to="grace",
+                )
+            )
+        )
+
+        assert db.accounts["grace"]["plan_until"] == LATER
 
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and
