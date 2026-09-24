@@ -34,6 +34,36 @@ CREATE TABLE IF NOT EXISTS users (
     -- Set by hand to cut someone off without deleting their account.
     blocked       BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- Added after the table existed, so they are separate and idempotent.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+-- When the paid period ends. Null on free. Compared against, never trusted
+-- from an event's arrival order.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_until TIMESTAMPTZ;
+-- 'play' when it was paid for, 'granted' when we gave it to someone.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_source TEXT;
+
+-- What an account has spent, by month. A new month is a new row: nothing has
+-- to run on a schedule to reset a counter, and last month stays readable.
+CREATE TABLE IF NOT EXISTS usage (
+    uid                  TEXT NOT NULL,
+    month                TEXT NOT NULL,          -- 'YYYY-MM', UTC
+    transcribed_seconds  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (uid, month)
+);
+
+-- Every billing event we have ever applied.
+--
+-- The primary key IS the idempotency. Stores deliver webhooks more than once,
+-- and an INSERT that loses to a duplicate tells us so without a
+-- check-then-write race to get wrong. It is also the audit trail: when someone
+-- says they paid, this is what we read.
+CREATE TABLE IF NOT EXISTS billing_events (
+    event_id     TEXT PRIMARY KEY,
+    uid          TEXT,
+    kind         TEXT NOT NULL,
+    received_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

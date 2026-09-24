@@ -12,6 +12,10 @@ load_dotenv()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# What RevenueCat sends in the Authorization header of a webhook. Empty means
+# billing events are refused: an event we cannot verify must not change a plan.
+REVENUECAT_WEBHOOK_SECRET = os.getenv("REVENUECAT_WEBHOOK_SECRET", "")
+
 # Neon connection string. Empty means anything needing the database answers 503.
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 DB_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "5"))

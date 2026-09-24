@@ -51,5 +51,18 @@ class TestUsers:
         return user
 
 
+class TestUsage:
+    """Usage in memory, so tests never need a database."""
+
+    def __init__(self) -> None:
+        self.rows: dict[tuple[str, str], int] = {}
+
+    def used(self, uid: str, month: str) -> int:
+        return self.rows.get((uid, month), 0)
+
+    def record(self, uid: str, month: str, seconds: int) -> None:
+        self.rows[(uid, month)] = self.rows.get((uid, month), 0) + seconds
+
+
 def bearer(token: str = "valid-token") -> dict:
     return {"Authorization": f"Bearer {token}"}

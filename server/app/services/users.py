@@ -1,13 +1,13 @@
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Protocol
 
 import psycopg
 
 from app.core import config
-from app.services import db
+from app.services import db, plans
 
 # How many checks between sweeps of accounts whose entry has expired.
 _SWEEP_EVERY = 500
@@ -25,6 +25,26 @@ class CarryUser:
     email: str | None
     created_at: datetime
     blocked: bool
+    #: 'free' or 'plus' as stored. Ask [effective_plan] for what they may
+    #: actually do: a period that has passed is free whatever the row says.
+    plan: str = plans.FREE
+    #: When the paid period ends. None on free.
+    plan_until: datetime | None = None
+
+    @property
+    def effective_plan(self) -> str:
+        """The plan as it stands right now.
+
+        An expiry webhook can be missed - stores drop them, and ours has a
+        reconciliation path precisely because they do. Reading the stored plan
+        without its end date would leave somebody on the paid allowance for
+        ever after they stopped paying.
+        """
+        if self.plan == plans.FREE:
+            return plans.FREE
+        if self.plan_until is not None and self.plan_until <= datetime.now(UTC):
+            return plans.FREE
+        return self.plan
 
 
 class UserStore(Protocol):
@@ -131,12 +151,20 @@ class PostgresUsers:
             if claimed is not None:
                 self._release(uid, claimed)
             raise db.Unavailable(f"users.seen failed: {e}") from e
-        return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
+        return CarryUser(
+            uid=row[0],
+            email=row[1],
+            created_at=row[2],
+            blocked=row[3],
+            plan=row[4],
+            plan_until=row[5],
+        )
 
     def _read(self, uid: str) -> tuple | None:
         with db.connection() as conn:
             return conn.execute(
-                "SELECT uid, email, created_at, blocked FROM users WHERE uid = %s",
+                "SELECT uid, email, created_at, blocked, plan, plan_until"
+                " FROM users WHERE uid = %s",
                 (uid,),
             ).fetchone()
 
@@ -151,7 +179,7 @@ class PostgresUsers:
                         -- Keep the address current, but never wipe a known one
                         -- if a token arrives without it.
                         email = COALESCE(EXCLUDED.email, users.email)
-                RETURNING uid, email, created_at, blocked
+                RETURNING uid, email, created_at, blocked, plan, plan_until
                 """,
                 (uid, email),
             ).fetchone()
