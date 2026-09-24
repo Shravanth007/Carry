@@ -589,6 +589,32 @@ class TestTransfer:
         assert db.accounts["ada"]["plan"] == plans.FREE
         assert db.accounts["grace"]["plan"] == plans.PLUS
 
+    def test_one_account_named_twice_is_still_one_account(self, database):
+        """Counting the names rather than the accounts would send a transfer
+        we could have applied off to be sorted out by hand."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t12",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from=["ada", "ada"],
+                    transferred_to=["grace", "grace"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.FREE
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+        assert "t12" not in db.problems
+
     def test_two_accounts_on_one_side_move_nothing(self, database):
         """There is no way to tell which of them the subscription belongs to.
         Guessing would either strand it or hand it to the wrong person, so

@@ -350,13 +350,20 @@ def _side(value) -> str | None:
     RevenueCat sends each side as an *array* of app user IDs, not a string -
     one customer can have several, the anonymous one the store issued before
     they signed in and then ours. Only ours names an account, so the anonymous
-    ones are dropped. If that leaves more than one there is no way to choose
-    between them, and inventing an answer would either strand a subscription
-    or hand it to the wrong account, so we take none and let reconciliation
-    settle it.
+    ones are dropped, and the rest deduplicated: the same account named twice
+    is one account, and treating it as two would send a transfer we could have
+    applied off to be sorted out by hand.
+
+    If that still leaves more than one there is no way to choose between them,
+    and inventing an answer would either strand a subscription or hand it to
+    the wrong account, so we take none and leave a note for a person.
     """
     ids = value if isinstance(value, list) else [value]
-    ours = [str(i) for i in ids if i and not str(i).startswith(ANONYMOUS)]
+    # dict.fromkeys, not a set: which one is left matters when there is one,
+    # and a set's order is not the payload's.
+    ours = list(
+        dict.fromkeys(str(i) for i in ids if i and not str(i).startswith(ANONYMOUS))
+    )
     if len(ours) > 1:
         log.warning("a transfer names %d accounts on one side; leaving it", len(ours))
         return None

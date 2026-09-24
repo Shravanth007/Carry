@@ -147,6 +147,11 @@ SELECT event_id, kind, received_at, problem
   FROM billing_events WHERE problem IS NOT NULL ORDER BY received_at;
 ```
 
+Fixing one is a query and a `UPDATE users SET plan ...` by hand. That is the
+right amount of machinery for a list that should be empty: an admin screen
+nobody opens is a second way to change a plan, and a second way to get it
+wrong. Build one when real money is moving and the list stops being empty.
+
 **Only ever move `plan_until` forwards, and that includes downgrades.**
 Webhooks arrive out of order. An old `RENEWAL` landing after a newer one must
 not shorten somebody's month — and, the trap, an old `EXPIRATION` arriving after

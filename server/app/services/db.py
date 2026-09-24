@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS billing_events (
 --
 --   SELECT event_id, kind, received_at, problem
 --     FROM billing_events WHERE problem IS NOT NULL ORDER BY received_at;
+--
+-- ponytail: a query and a fix by hand. An admin screen is the upgrade, and it
+-- earns its keep when this list stops being empty - not before, because it
+-- would be a second way to change a plan and a second way to get it wrong.
 ALTER TABLE billing_events ADD COLUMN IF NOT EXISTS problem TEXT;
 """
 
