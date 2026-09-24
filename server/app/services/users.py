@@ -39,11 +39,22 @@ class PostgresUsers:
     """The real store. One statement: create if new, refresh if not.
 
     `last_seen_at` is not written on every call. Inside the rate limit one
-    account can call sixty times a minute, and sixty writes a minute per person
-    is a lot of write-ahead log for one timestamp nobody reads that precisely.
-    Between writes the row is **read** instead: a read costs Postgres far less,
-    and it keeps `blocked` current, so cutting someone off still takes effect on
-    their next call rather than minutes later.
+    account can call sixty times a minute, and sixty writes a minute for one
+    timestamp is a lot of write-ahead log. Between writes the row is **read**
+    instead: a read costs Postgres far less, and it keeps `blocked` current, so
+    cutting someone off still takes effect on their very next call.
+
+    The email comes along on the write, and only on the write. Chasing it on
+    the read path - writing whenever the token's address differs from the row -
+    sounds fresher and isn't: two devices holding tokens from either side of an
+    email change would each "correct" the other, writing on every call and
+    leaving whichever spoke last. So `/me` can be up to
+    `SEEN_WRITE_EVERY_SECONDS` behind on an email that just changed, which is a
+    bounded, quiet wrongness rather than an unbounded, noisy one.
+
+    ponytail: if an email ever has to be exact, the honest fix is the token's
+    `iat` - store when the address was set and only accept a newer token - not
+    a comparison that can't tell which of two tokens is newer.
     """
 
     def __init__(self) -> None:
@@ -52,23 +63,31 @@ class PostgresUsers:
         self._lock = threading.Lock()
         self._checks = 0
 
-    def _due(self, uid: str, now: float | None = None) -> bool:
-        """Whether this account's timestamp is old enough to write again."""
-        now = now if now is not None else time.monotonic()
-        with self._lock:
-            last = self._written.get(uid)
-            return last is None or now - last >= config.SEEN_WRITE_EVERY_SECONDS
+    def _claim(self, uid: str, now: float | None = None) -> bool:
+        """Takes the right to write this account's timestamp, or says no.
 
-    def _wrote(self, uid: str, now: float | None = None) -> None:
-        """Remembers a write that actually happened.
+        Claimed **before** the write, not recorded after it. Recording after
+        looks more honest and isn't: requests for one account arrive at the same
+        moment, and if none of them has claimed yet, every one of them decides
+        it is due and they all write - a stampede on a pool of five connections,
+        which is exactly what the throttle exists to avoid.
 
-        Recorded after the write, not before: a write that failed in a database
-        blip must not buy five minutes of not trying again.
+        A write that then fails gives the claim back through [_release], so a
+        database blip doesn't buy five minutes of not trying again either.
         """
         now = now if now is not None else time.monotonic()
         with self._lock:
+            last = self._written.get(uid)
+            if last is not None and now - last < config.SEEN_WRITE_EVERY_SECONDS:
+                return False
             self._written[uid] = now
             self._forget_old(now)
+            return True
+
+    def _release(self, uid: str) -> None:
+        """Gives back a claim whose write didn't happen."""
+        with self._lock:
+            self._written.pop(uid, None)
 
     def _forget_old(self, now: float) -> None:
         """Drops accounts whose entry has expired anyway.
@@ -91,17 +110,18 @@ class PostgresUsers:
             del self._written[uid]
 
     def seen(self, uid: str, email: str | None) -> CarryUser:
+        writing = self._claim(uid)
         try:
-            row = None if self._due(uid) else self._read(uid)
-            # Three ways to end up writing after all: the interval passed, the
-            # row is gone (deleted between calls), or the token carries a newer
-            # email than the row - /me must not answer with an old address.
-            if row is None or (email is not None and row[1] != email):
+            row = self._upsert(uid, email) if writing else self._read(uid)
+            # The row can only be missing on the read path, and only if the
+            # account was deleted between calls. Create it again.
+            if row is None:
                 row = self._upsert(uid, email)
-                self._wrote(uid)
         # Neon suspends an idle branch, and networks drop. A hiccup is a 503
         # the app can retry, not a 500 that looks like a bug in Carry.
         except psycopg.Error as e:
+            if writing:
+                self._release(uid)
             raise db.Unavailable(f"users.seen failed: {e}") from e
         return CarryUser(uid=row[0], email=row[1], created_at=row[2], blocked=row[3])
 

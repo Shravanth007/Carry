@@ -25,18 +25,41 @@ _last_logged: dict[str, float] = {}
 _suppressed: dict[str, int] = {}
 
 
-def _log_sometimes(kind: str, message: str, *args) -> None:
+def _log_sometimes(key: str, message: str, *args) -> None:
+    """One line per key every few seconds, carrying what it suppressed.
+
+    [key] includes the address, not just the kind of refusal: sampling by kind
+    alone would name whichever address happened to trigger the next line and
+    lose the rest - and the address is the one thing the runbook tells an
+    operator to go and block.
+    """
     now = time.monotonic()
-    last = _last_logged.get(kind)
+    last = _last_logged.get(key)
     if last is not None and now - last < _LOG_EVERY:
-        _suppressed[kind] = _suppressed.get(kind, 0) + 1
+        _suppressed[key] = _suppressed.get(key, 0) + 1
         return
-    _last_logged[kind] = now
-    missed = _suppressed.pop(kind, 0)
+    _last_logged[key] = now
+    _forget_quiet(now)
+    missed = _suppressed.pop(key, 0)
     if missed:
         log.warning("%s (and %d more in the last few seconds)", message % args, missed)
     else:
         log.warning(message, *args)
+
+
+def _forget_quiet(now: float) -> None:
+    """Drops keys that have gone quiet.
+
+    One entry per address, kept forever, is the same slow leak the rate limiter
+    and the write throttle both had - and during a flood from many addresses it
+    would grow fastest exactly when memory matters.
+    """
+    if len(_last_logged) < 1000:
+        return
+    quiet = [k for k, when in _last_logged.items() if now - when >= _LOG_EVERY * 10]
+    for k in quiet:
+        _last_logged.pop(k, None)
+        _suppressed.pop(k, None)
 
 
 class LoadShedder:
@@ -63,7 +86,7 @@ class LoadShedder:
 
         if self.in_flight >= self.most:
             _log_sometimes(
-                "shed",
+                "shed",  # one counter: shedding is about the server, not a caller
                 "shedding %s, %d already in flight",
                 scope.get("path"),
                 self.in_flight,
@@ -94,8 +117,9 @@ async def ip_rate_limit(request, call_next):
     try:
         ip_limiter().check(where)
     except TooMany as e:
+        # Keyed by address: an operator needs to know which one to block.
         _log_sometimes(
-            "rate", "rate limited %s on %s", where, request.url.path
+            f"rate:{where}", "rate limited %s on %s", where, request.url.path
         )
         return JSONResponse(
             {"detail": "Too many requests. Slow down and try again shortly."},

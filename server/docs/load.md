@@ -100,8 +100,10 @@ timestamp is a lot of write-ahead log. Between writes the row is **read**
 instead: cheaper for Postgres, and `blocked` stays current, so cutting someone
 off still takes effect on their very next call.
 
-**Refusals are logged sparingly.** One line every five seconds per kind,
-carrying how many were suppressed. A line per refused request would be work
+**Refusals are logged sparingly.** One line every five seconds **per address**,
+carrying how many were suppressed — keyed by address because that is what an
+operator blocks; sampling by kind alone would name whichever address triggered
+the next line and lose the rest. A line per refused request would be work
 added exactly when the point is to refuse work cheaply — and a log bill on top.
 
 ## What is deliberately *not* here
@@ -141,8 +143,11 @@ In rough order of how much they help:
 
 ## If it is happening right now
 
-1. **Look at the logs.** `carry.load` logs every shed and every rate limit, with
-   the address and path. `carry.request` has one line per request with its ID.
+1. **Look at the logs.** `carry.load` logs a line **per address** every few
+   seconds, carrying how many more it suppressed, so the addresses doing it are
+   named rather than just the fact that something is. `carry.request` has one
+   line per request with its ID; `carry.auth` has account-level refusals and
+   database trouble.
 2. **Is it one account?** Block it, and their next call gets `403`:
    ```sql
    UPDATE users SET blocked = true WHERE uid = '<the uid>';
@@ -156,7 +161,10 @@ In rough order of how much they help:
 5. **Is the database the problem?** A `DB_TIMEOUT_SECONDS` failure means a
    connection wasn't acquired in time. That is **not** proof the pool is
    saturated — the same timeout happens when Neon is waking from suspend, or is
-   unreachable. Check connectivity first: `carry.db` logs what it couldn't do.
+   unreachable. Check connectivity first — and look at **`carry.auth`**, not
+   just `carry.db`: once the tables exist, a connection that can't be acquired
+   inside `users.seen` is logged by the dependency that caught it, so watching
+   only `carry.db` hides the very error this step is about.
    Only raise `DB_MAX_CONNECTIONS` for a genuinely saturated pool, and only if
    Neon has the headroom.
 

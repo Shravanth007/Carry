@@ -199,43 +199,50 @@ class TestWriteThrottle:
     """Sixty calls a minute is inside the per-account limit; sixty writes a
     minute for one timestamp is not worth the write-ahead log."""
 
-    def test_the_first_call_writes(self):
+    def test_the_first_call_claims_the_write(self):
         store = PostgresUsers()
 
-        assert store._due("ada", now=0) is True  # noqa: SLF001 - the point
+        assert store._claim("ada", now=0) is True  # noqa: SLF001 - the point
 
-    def test_a_call_straight_after_a_write_reads_instead(self):
+    def test_a_call_straight_after_reads_instead(self):
         store = PostgresUsers()
-        store._wrote("ada", now=0)  # noqa: SLF001
+        store._claim("ada", now=0)  # noqa: SLF001
 
-        assert store._due("ada", now=30) is False  # noqa: SLF001
+        assert store._claim("ada", now=30) is False  # noqa: SLF001
 
-    def test_and_writes_again_once_the_interval_has_passed(self):
+    def test_requests_at_the_same_moment_do_not_all_write(self):
+        """The reason the claim is taken before the write, not recorded after
+        it: several requests for one account arrive together, and if none has
+        claimed yet they all decide they are due - a stampede on a pool of
+        five connections."""
         store = PostgresUsers()
-        store._wrote("ada", now=0)  # noqa: SLF001
+
+        claims = [store._claim("ada", now=0) for _ in range(20)]  # noqa: SLF001
+
+        assert claims.count(True) == 1
+
+    def test_and_claims_again_once_the_interval_has_passed(self):
+        store = PostgresUsers()
+        store._claim("ada", now=0)  # noqa: SLF001
         later = config.SEEN_WRITE_EVERY_SECONDS + 1
 
-        assert store._due("ada", now=later) is True  # noqa: SLF001
+        assert store._claim("ada", now=later) is True  # noqa: SLF001
 
-    def test_a_write_that_never_happened_buys_nothing(self):
-        """The time is recorded after the write, so a write that failed in a
-        database blip doesn't stop the next call trying again."""
+    def test_a_claim_given_back_lets_the_next_call_try(self):
+        """A write that failed in a database blip must not buy five minutes of
+        not trying again."""
         store = PostgresUsers()
+        store._claim("ada", now=0)  # noqa: SLF001
 
-        assert store._due("ada", now=0) is True  # noqa: SLF001
-        assert store._due("ada", now=1) is True  # noqa: SLF001
+        store._release("ada")  # noqa: SLF001
+
+        assert store._claim("ada", now=1) is True  # noqa: SLF001
 
     def test_accounts_are_counted_apart(self):
         store = PostgresUsers()
-        store._wrote("ada", now=0)  # noqa: SLF001
+        store._claim("ada", now=0)  # noqa: SLF001
 
-        assert store._due("grace", now=0) is True  # noqa: SLF001
-
-
-def test_the_limiter_classes_are_the_same_one(fresh_ip_limit):
-    """Addresses and accounts are counted by the same sliding window, with
-    different allowances, so there is one piece of counting to get right."""
-    assert isinstance(fresh_ip_limit, RateLimiter)
+        assert store._claim("grace", now=0) is True  # noqa: SLF001
 
 
 class _FakeCursor:
@@ -310,18 +317,29 @@ class TestSeenAgainstTheDatabase:
 
         assert store.seen("ada", "ada@example.com").blocked is True
 
-    def test_a_new_email_is_written_even_inside_the_interval(self, monkeypatch):
-        """The token's email is fresher than the row, so /me must not answer
-        with the old address."""
-        renamed = ("ada", "new@example.com", ROW[2], False)
-        store, statements = _store_talking_to(monkeypatch, [ROW, ROW, renamed])
+    def test_an_email_change_waits_for_the_next_write(self, monkeypatch):
+        """Deliberate: chasing the token's email on the read path means two
+        devices holding tokens from either side of a change each "correct" the
+        other, writing on every call. /me is instead up to one interval behind,
+        which is quieter and bounded."""
+        store, statements = _store_talking_to(monkeypatch, [ROW, ROW])
         store.seen("ada", "ada@example.com")
 
         user = store.seen("ada", "new@example.com")
 
-        assert user.email == "new@example.com"
+        assert user.email == "ada@example.com"
         assert statements[1].startswith("SELECT")
-        assert statements[2].startswith("INSERT INTO users")
+
+    def test_and_the_next_write_takes_it(self, monkeypatch):
+        renamed = ("ada", "new@example.com", ROW[2], False)
+        store, statements = _store_talking_to(monkeypatch, [ROW, renamed])
+        store.seen("ada", "ada@example.com")
+        store._release("ada")  # noqa: SLF001 - stand in for the interval passing
+
+        user = store.seen("ada", "new@example.com")
+
+        assert user.email == "new@example.com"
+        assert statements[1].startswith("INSERT INTO users")
 
     def test_a_row_that_vanished_is_created_again(self, monkeypatch):
         store, statements = _store_talking_to(monkeypatch, [ROW, None, ROW])
@@ -356,6 +374,23 @@ class TestSeenAgainstTheDatabase:
 class TestRefusalLogs:
     """A flood must not become a log flood: that is work added exactly when the
     point is to refuse work cheaply."""
+
+    def test_each_address_gets_its_own_line(self, caplog, monkeypatch):
+        """Sampling by kind alone would name whichever address triggered the
+        next line and lose the others - and the address is what an operator
+        blocks."""
+        monkeypatch.setattr(load, "_last_logged", {})
+        monkeypatch.setattr(load, "_suppressed", {})
+
+        with caplog.at_level(logging.WARNING, logger="carry.load"):
+            for address in ("1.1.1.1", "2.2.2.2", "3.3.3.3"):
+                for _ in range(10):
+                    load._log_sometimes(  # noqa: SLF001
+                        f"rate:{address}", "rate limited %s", address
+                    )
+
+        named = {record.message.split()[-1] for record in caplog.records}
+        assert named == {"1.1.1.1", "2.2.2.2", "3.3.3.3"}
 
     def test_repeated_refusals_are_summarised(self, caplog, monkeypatch):
         monkeypatch.setattr(load, "_last_logged", {})
