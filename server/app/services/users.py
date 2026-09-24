@@ -57,11 +57,18 @@ class PostgresUsers:
         now = now if now is not None else time.monotonic()
         with self._lock:
             last = self._written.get(uid)
-            if last is not None and now - last < config.SEEN_WRITE_EVERY_SECONDS:
-                return False
+            return last is None or now - last >= config.SEEN_WRITE_EVERY_SECONDS
+
+    def _wrote(self, uid: str, now: float | None = None) -> None:
+        """Remembers a write that actually happened.
+
+        Recorded after the write, not before: a write that failed in a database
+        blip must not buy five minutes of not trying again.
+        """
+        now = now if now is not None else time.monotonic()
+        with self._lock:
             self._written[uid] = now
             self._forget_old(now)
-            return True
 
     def _forget_old(self, now: float) -> None:
         """Drops accounts whose entry has expired anyway.
@@ -85,11 +92,13 @@ class PostgresUsers:
 
     def seen(self, uid: str, email: str | None) -> CarryUser:
         try:
-            row = self._upsert(uid, email) if self._due(uid) else self._read(uid)
-            # A row can be missing on the read path only if the account was
-            # deleted between calls, so fall back to creating it again.
-            if row is None:
+            row = None if self._due(uid) else self._read(uid)
+            # Three ways to end up writing after all: the interval passed, the
+            # row is gone (deleted between calls), or the token carries a newer
+            # email than the row - /me must not answer with an old address.
+            if row is None or (email is not None and row[1] != email):
                 row = self._upsert(uid, email)
+                self._wrote(uid)
         # Neon suspends an idle branch, and networks drop. A hiccup is a 503
         # the app can retry, not a 500 that looks like a bug in Carry.
         except psycopg.Error as e:

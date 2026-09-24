@@ -31,10 +31,6 @@ RATE_LIMIT_PER_IP_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_IP_PER_MINUTE", "12
 # better than queueing: a queue holds memory and workers until nothing finishes.
 MAX_IN_FLIGHT = int(os.getenv("MAX_IN_FLIGHT", "50"))
 
-# Whether X-Forwarded-For can be believed. Only true when something we control
-# sets it - otherwise one script can claim a thousand addresses.
-TRUST_PROXY_HEADER = os.getenv("TRUST_PROXY_HEADER", "false").lower() == "true"
-
 # How often an account's last_seen_at is actually written. Between writes the
 # row is read instead, which costs Postgres far less and keeps blocking
 # immediate.

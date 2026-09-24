@@ -8,6 +8,7 @@ See `docs/load.md` for the order they run in and what each is for.
 """
 
 import logging
+import time
 
 from fastapi.responses import JSONResponse
 
@@ -15,6 +16,27 @@ from app.core import config
 from app.services.rate_limit import TooMany, ip_limiter
 
 log = logging.getLogger("carry.load")
+
+# A flood means a refusal per request, and a log line per refusal is work added
+# exactly when the point is to refuse work cheaply. One line every few seconds,
+# carrying how many were suppressed, says the same thing for far less.
+_LOG_EVERY = 5.0
+_last_logged: dict[str, float] = {}
+_suppressed: dict[str, int] = {}
+
+
+def _log_sometimes(kind: str, message: str, *args) -> None:
+    now = time.monotonic()
+    last = _last_logged.get(kind)
+    if last is not None and now - last < _LOG_EVERY:
+        _suppressed[kind] = _suppressed.get(kind, 0) + 1
+        return
+    _last_logged[kind] = now
+    missed = _suppressed.pop(kind, 0)
+    if missed:
+        log.warning("%s (and %d more in the last few seconds)", message % args, missed)
+    else:
+        log.warning(message, *args)
 
 
 class LoadShedder:
@@ -40,7 +62,8 @@ class LoadShedder:
             return
 
         if self.in_flight >= self.most:
-            log.warning(
+            _log_sometimes(
+                "shed",
                 "shedding %s, %d already in flight",
                 scope.get("path"),
                 self.in_flight,
@@ -71,7 +94,9 @@ async def ip_rate_limit(request, call_next):
     try:
         ip_limiter().check(where)
     except TooMany as e:
-        log.warning("rate limited %s on %s", where, request.url.path)
+        _log_sometimes(
+            "rate", "rate limited %s on %s", where, request.url.path
+        )
         return JSONResponse(
             {"detail": "Too many requests. Slow down and try again shortly."},
             status_code=429,
@@ -83,18 +108,18 @@ async def ip_rate_limit(request, call_next):
 def client_address(request) -> str:
     """Who to count this request against.
 
-    `X-Forwarded-For` is a header, so anyone can write anything in it: trusting
-    it without a proxy in front would let one script pretend to be a thousand
-    addresses and skip the limit entirely. It is used only when
-    `TRUST_PROXY_HEADER` says something we control sets it, and then the **last**
-    entry is taken, because that is the one our own proxy wrote — the earlier
-    ones came from the client.
+    Just the address the connection came from. Deliberately **not** read from
+    `X-Forwarded-For` here: a header is only as trustworthy as whatever set it,
+    and trusting it means a caller who can reach the server directly rotates the
+    last hop on every request and gets a fresh allowance each time — the limit
+    would be worse than none, because it would look like it was working.
+
+    Getting that right needs to know whether *this connection* came from the
+    proxy, and uvicorn already does it: start it with
+    `--forwarded-allow-ips=<the proxy>` and it rewrites the client address from
+    the header for those peers only. Then this reads the right thing with no
+    code of our own to get wrong. See `docs/load.md`.
     """
-    if config.TRUST_PROXY_HEADER:
-        forwarded = request.headers.get("X-Forwarded-For", "")
-        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
-        if hops:
-            return hops[-1]
     client = request.client
     return client.host if client else "unknown"
 

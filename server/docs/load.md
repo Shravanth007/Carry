@@ -59,30 +59,50 @@ restarting, without a deploy.
 | `DB_MAX_CONNECTIONS` | 5 | Neon's free tier has a modest budget |
 | `DB_TIMEOUT_SECONDS` | 2 | Short on purpose: a long wait means requests pile up behind the pool instead of being refused |
 | `SEEN_WRITE_EVERY_SECONDS` | 300 | How often `last_seen_at` is really written |
-| `TRUST_PROXY_HEADER` | false | Only true when something we control sets `X-Forwarded-For` |
 
-### Why `TRUST_PROXY_HEADER` matters
+### Addresses behind a proxy
 
-`X-Forwarded-For` is a header, so it is only as trustworthy as whatever set it.
-Believing it with no proxy in front would let one script claim a thousand
-addresses and skip the limit entirely. When it is on, the **last** entry is
-used: that is the one our own proxy wrote, and everything before it came from
-the client.
+The limiter counts the address the connection came from. It does **not** read
+`X-Forwarded-For`, and that is deliberate: a header is only as trustworthy as
+whatever set it, so a caller who can reach the server directly would rotate the
+last hop and get a fresh allowance every request. A limit that can be rotated
+away is worse than none, because it looks like it is working.
 
-**Turn it on the day something sits in front, and not before.**
+Doing it properly means knowing whether *this connection* came from the proxy,
+and **uvicorn already does it**:
+
+```
+uvicorn app.main:app --forwarded-allow-ips="<the proxy's address>"
+```
+
+With that, uvicorn rewrites the client address from the header for that peer
+only, and the limiter reads the right thing with no code of ours to get wrong.
+Without it, every request behind a proxy looks like it came from the proxy and
+they all share one allowance — so this flag is not optional once something sits
+in front.
 
 ## Two quieter savings
 
 **A token that cannot be real never reaches Firebase.** A Firebase ID token is
 a JWT: three dot-separated parts, about a thousand characters. Anything else is
 refused by a string split, in `services/firebase_auth.py`, instead of costing
-public-key crypto. A flood of junk tokens is now nearly free to turn away.
+public-key crypto.
+
+Be precise about what that buys: it only skips **obvious** rubbish. A forgery
+shaped like a JWT still reaches verification and still costs a signature check.
+What bounds *that* is the per-address limit — 120 verifications a minute from
+one address, not unlimited. The cheap check removes the free hits; the limit
+caps the expensive ones.
 
 **`last_seen_at` is not written on every call.** Inside the rate limit one
 account can call sixty times a minute, and sixty writes a minute for one
 timestamp is a lot of write-ahead log. Between writes the row is **read**
 instead: cheaper for Postgres, and `blocked` stays current, so cutting someone
 off still takes effect on their very next call.
+
+**Refusals are logged sparingly.** One line every five seconds per kind,
+carrying how many were suppressed. A line per refused request would be work
+added exactly when the point is to refuse work cheaply — and a log bill on top.
 
 ## What is deliberately *not* here
 
@@ -109,8 +129,9 @@ In rough order of how much they help:
 1. **Put Cloudflare in front** (free). It absorbs volumetric traffic the app
    would never survive, and adds rate limiting and bot rules at the edge. This
    is worth more than everything above put together for a real flood.
-2. **Set `TRUST_PROXY_HEADER=true`** once that proxy exists — otherwise every
-   request appears to come from the proxy and shares one allowance.
+2. **Start uvicorn with `--forwarded-allow-ips=<proxy>`** once that proxy
+   exists — otherwise every request appears to come from the proxy and they all
+   share one allowance.
 3. **App Check** with Play Integrity, so requests can be tied to the real app
    rather than a script holding a stolen token.
 4. **Uvicorn's own limits**: `--limit-concurrency`, `--timeout-keep-alive`,
@@ -132,10 +153,12 @@ In rough order of how much they help:
 4. **Is it everywhere?** Lower `RATE_LIMIT_PER_IP_PER_MINUTE` and
    `MAX_IN_FLIGHT` in the environment and restart. The server stays up serving
    fewer people, which beats being down for everyone.
-5. **Is the database the problem?** `DB_TIMEOUT_SECONDS` shedding means the pool
-   is saturated: requests are being refused rather than queued, which is
-   working as intended. Raising `DB_MAX_CONNECTIONS` is only right if Neon has
-   the headroom.
+5. **Is the database the problem?** A `DB_TIMEOUT_SECONDS` failure means a
+   connection wasn't acquired in time. That is **not** proof the pool is
+   saturated — the same timeout happens when Neon is waking from suspend, or is
+   unreachable. Check connectivity first: `carry.db` logs what it couldn't do.
+   Only raise `DB_MAX_CONNECTIONS` for a genuinely saturated pool, and only if
+   Neon has the headroom.
 
 ## Tests
 
