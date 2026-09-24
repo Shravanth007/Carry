@@ -1,5 +1,7 @@
 import 'package:carry/auth/sign_in_screen.dart';
+import 'package:carry/api/api.dart';
 import 'package:carry/backup/backup_screen.dart';
+import 'package:carry/billing/plan_screen.dart';
 import 'package:carry/home/home_screen.dart';
 import 'package:carry/notes/notes.dart';
 import 'package:carry/onboarding/microphone_screen.dart';
@@ -36,6 +38,16 @@ void main() {
     'settings': const SettingsScreen(name: 'Ada Lovelace', email: testEmail),
     'permissions': const PermissionsScreen(),
     'backup': const BackupScreen(),
+    // The paid state: the longest strings on the screen.
+    'plan': PlanScreen(
+      previewUser: ServerUser(
+        uid: 'preview',
+        since: DateTime(2026, 1, 1),
+        plan: 'plus',
+        planUntil: DateTime(2026, 11, 1),
+        secondsLeft: 71000,
+      ),
+    ),
     // An hour-long recording gives the clock its widest reading.
     'recording bar': Scaffold(
       bottomNavigationBar: RecordingBar(

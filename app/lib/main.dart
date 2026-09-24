@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'analytics/analytics.dart';
 import 'auth/auth.dart';
+import 'billing/billing.dart';
 import 'firebase_options.dart';
 import 'home/home_screen.dart';
 import 'onboarding/onboarding.dart';
@@ -15,8 +18,13 @@ Future<void> main() async {
   // Before the first frame so the first screen someone sees is counted. It
   // does nothing at all unless the build carried a POSTHOG_KEY.
   await Analytics.init();
+  // The store, like analytics, does nothing at all without a key.
+  await Billing.init();
   final alreadySignedIn = Auth.currentUser;
-  if (alreadySignedIn != null) Analytics.identify(alreadySignedIn.uid);
+  if (alreadySignedIn != null) {
+    Analytics.identify(alreadySignedIn.uid);
+    unawaited(Billing.identify(alreadySignedIn.uid));
+  }
   runApp(const CarryApp());
 }
 
