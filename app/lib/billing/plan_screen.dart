@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
 import '../api/api.dart';
+import '../limits.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
 import '../widgets/scrollable_column.dart';
@@ -305,13 +306,21 @@ class _PlusCard extends StatelessWidget {
               offer.title,
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
-              '20 hours of transcription a month, and your audio kept for as '
-              'long as you keep the plan.',
-              style: text.bodyMedium?.copyWith(color: CarryColors.muted),
+              'What you get',
+              style: text.bodySmall?.copyWith(color: CarryColors.muted),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // Not const: a record's field can't be read in a const
+            // expression, and the numbers belong in limits.dart.
+            _Benefit(
+              gives: Plans.plus.transcription,
+              insteadOf: Plans.free.transcription,
+            ),
+            const SizedBox(height: 10),
+            _Benefit(gives: Plans.plus.audio, insteadOf: Plans.free.audio),
+            const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -323,12 +332,62 @@ class _PlusCard extends StatelessWidget {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    : Text(offer.price),
+                    // The price the store quoted, in the money the person
+                    // actually pays. Never a number typed in here.
+                    : Text('Upgrade for ${offer.price}'),
               ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Google Play takes the payment and manages it. Cancel any time '
+              'in Play, and Plus runs to the end of the period you paid for.',
+              style: text.bodySmall?.copyWith(color: CarryColors.muted),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One thing Plus gives, and what Free gives instead.
+///
+/// Both lines, not just the good one: "20 hours a month" means nothing to
+/// somebody who doesn't know what they have now, and a paywall that hides the
+/// comparison is the kind that gets refunded.
+class _Benefit extends StatelessWidget {
+  const _Benefit({required this.gives, required this.insteadOf});
+
+  final String gives;
+  final String insteadOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          // Sits on the first line of text however large the type is.
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(Icons.check_rounded, size: 18, color: CarryColors.accent),
+        ),
+        const SizedBox(width: 10),
+        // Flexible, because at the largest text size these wrap to three
+        // lines on a small phone.
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(gives, style: text.bodyMedium),
+              Text(
+                'Free: $insteadOf',
+                style: text.bodySmall?.copyWith(color: CarryColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
