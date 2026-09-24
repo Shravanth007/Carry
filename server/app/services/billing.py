@@ -267,7 +267,9 @@ def _transfer(conn, event: Event) -> None:
     transaction makes each one atomic without stopping the plan being copied.
 
     A plan we granted by hand is left alone: it isn't the subscription being
-    transferred, and taking it away would punish the wrong person.
+    transferred, taking it away would punish the wrong person, and there is
+    nothing for the destination either - the date on that row belongs to the
+    grant, which stays put.
     """
     if not event.from_uid or not event.to_uid:
         log.warning("transfer %s is missing an account", event.id)
@@ -279,44 +281,35 @@ def _transfer(conn, event: Event) -> None:
     if row is None or row[0] == plans.FREE:
         log.info("transfer %s: nothing to move", event.id)
         return
-    # Only a plan the store paid for is the store's to take away. A plan we
-    # granted by hand isn't the subscription being transferred, so it stays -
-    # but the destination is still given the subscription, because dropping it
-    # would lose paid access that cannot be replayed.
-    paid = row[2] == "play"
-
-    # What is actually moving, and for how long.
+    # A transfer event carries no period of its own. RevenueCat's TRANSFER
+    # payload is only `transferred_from` and `transferred_to` - no product, no
+    # expiry - so the source row's date is all there is, and it is the right
+    # one: a transfer moves every transaction on that store account, leaving
+    # nothing behind that could still own the date.
     #
-    # The event's own period when it carries one: that is the subscription
-    # being transferred. The source row's date is not a safe substitute - an
-    # account can hold more than one purchase, and this model keeps one plan
-    # per account, so that date may belong to a purchase that is staying put.
-    # It is only used when the event says nothing and the source was paid for.
-    until = event.period_end or (row[1] if paid else None)
-    if until is None or until <= datetime.now(UTC):
-        # Nothing to move: no period, or one that has already ended. Leave both
-        # accounts as they are rather than clearing a plan that is still
-        # running - reconciliation settles what we cannot work out from here.
-        log.info(
-            "transfer %s: nothing live to move from %s", event.id, event.from_uid
-        )
-        return
-
-    # Only now, when something is actually being handed over.
-    if paid:
-        conn.execute(
-            "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
-            " WHERE uid = %s",
-            (plans.FREE, event.from_uid),
-        )
-    else:
+    # Only a plan the store paid for is the store's to take away. A plan we
+    # granted by hand isn't the subscription being transferred, so it stays
+    # where it is, and there is nothing for the destination either.
+    if row[2] != "play":
         log.info(
             "transfer %s: %s on %s was granted by hand, leaving it",
             event.id,
             row[0],
             event.from_uid,
         )
+        return
+    until = row[1]
+    if until is None or until <= datetime.now(UTC):
+        # Undated or already over: nothing live to hand on, and clearing the
+        # source would only take away a plan that has expired anyway.
+        log.info("transfer %s: nothing live to move from %s", event.id, event.from_uid)
+        return
 
+    conn.execute(
+        "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
+        " WHERE uid = %s",
+        (plans.FREE, event.from_uid),
+    )
     _grant(conn, event.to_uid, until)
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 

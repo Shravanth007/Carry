@@ -13,8 +13,14 @@ from app.core import config
 from app.services import billing, plans
 
 SECRET = "a-shared-secret"
-LATER = datetime(2026, 10, 1, tzinfo=UTC)
-SOONER = datetime(2026, 9, 1, tzinfo=UTC)
+# Two periods that are still running, and stay that way: a fixed date would
+# quietly become "already expired" once it passed, and every test that means
+# "still paid for" would start passing for the wrong reason. Whole seconds,
+# because the payload carries milliseconds and anything finer than that would
+# not survive the round trip.
+_NOW = datetime.now(UTC).replace(microsecond=0)
+LATER = _NOW + timedelta(days=60)
+SOONER = _NOW + timedelta(days=30)
 
 
 def event(
@@ -457,15 +463,14 @@ class TestTransfer:
 
         # The manual grant stays where it was...
         assert db.accounts["ada"]["plan"] == plans.PLUS
-        # ...and the subscription still reaches the account it moved to.
-        # Dropping it would lose paid access that cannot be replayed.
-        assert db.accounts["grace"]["plan"] == plans.PLUS
+        # ...and nothing is invented for the destination. The date on that row
+        # belongs to the grant, which didn't move.
+        assert db.accounts["grace"]["plan"] == plans.FREE
 
-    def test_a_transfer_uses_the_period_the_event_carries(self, database):
-        """The event says what moved and for how long. The source row is not a
-        substitute: an account can hold more than one purchase, and this model
-        keeps one plan per account, so that date may belong to a purchase that
-        is staying where it is."""
+    def test_the_period_comes_from_the_source_not_the_event(self, database):
+        """A TRANSFER payload is `transferred_from` and `transferred_to` and
+        nothing else - no expiry. Anything a period field happens to hold on
+        one is not the subscription's, so the source row decides."""
         db = database(
             {
                 "ada": {
@@ -490,14 +495,12 @@ class TestTransfer:
             )
         )
 
-        assert db.accounts["grace"]["plan_until"] == LATER
+        assert db.accounts["grace"]["plan_until"] == SOONER
 
-    def test_an_event_period_that_has_ended_moves_nothing(self, database):
-        """The subscription being transferred has ended, so there is nothing
-        to hand over - and the source's own date may belong to a different
-        purchase that is still running. Taking that away would lose paid
-        access, so both accounts are left alone and reconciliation settles it.
-        """
+    def test_a_stale_event_period_does_not_stop_the_move(self, database):
+        """The source's subscription is live; a date on the event is not the
+        subscription's and must not be allowed to strand it on the account it
+        has left."""
         gone = datetime.now(UTC) - timedelta(days=10)
         db = database(
             {
@@ -519,21 +522,17 @@ class TestTransfer:
             )
         )
 
-        assert db.accounts["ada"]["plan"] == plans.PLUS  # still running
-        assert db.accounts["ada"]["plan_until"] == LATER
-        assert db.accounts["grace"]["plan"] == plans.FREE  # nothing to give
+        assert db.accounts["ada"]["plan"] == plans.FREE
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+        assert db.accounts["grace"]["plan_until"] == LATER
 
-    def test_a_hand_granted_period_is_not_handed_to_the_destination(self, database):
-        """The grant's end date belongs to the grant, which stays put. Using it
-        would give the destination a Play-marked plan lasting longer than the
-        subscription that actually moved."""
+    def test_a_period_that_has_already_ended_moves_nothing(self, database):
+        """The source's plan ran out before the transfer arrived. There is no
+        access left to hand over, so the destination is given none."""
+        gone = datetime.now(UTC) - timedelta(days=10)
         db = database(
             {
-                "ada": {
-                    "plan": plans.PLUS,
-                    "plan_until": LATER,
-                    "source": "granted",
-                },
+                "ada": {"plan": plans.PLUS, "plan_until": gone, "source": "play"},
                 "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
             }
         )
@@ -544,15 +543,13 @@ class TestTransfer:
                     event_id="t8",
                     kind="TRANSFER",
                     uid=None,
-                    ends=None,
                     transferred_from="ada",
                     transferred_to="grace",
                 )
             )
         )
 
-        assert db.accounts["ada"]["plan"] == plans.PLUS  # the grant stays
-        assert db.accounts["grace"]["plan"] == plans.FREE  # and nothing invented
+        assert db.accounts["grace"]["plan"] == plans.FREE
 
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and

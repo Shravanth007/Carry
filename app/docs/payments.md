@@ -134,7 +134,7 @@ PLANS = {
 | `EXPIRATION` | `plan = 'free'` **only if the period we hold has actually ended** — see below |
 | `BILLING_ISSUE` | Keep Plus, flag it: Play retries for days, and the app shows a banner |
 | `PRODUCT_CHANGE` | Re-read the entitlement, don't infer from the product |
-| `TRANSFER` | **Move** the plan from the old uid to the new one. One Play account, two Google logins — easy to forget and wrong in a way people notice |
+| `TRANSFER` | **Move** the plan from the old uid to the new one, keeping the source row's `plan_until` — a transfer payload is only `transferred_from` and `transferred_to`, with no period of its own. One Play account, two Google logins — easy to forget and wrong in a way people notice |
 | `REFUND` | `plan = 'free'` immediately |
 
 **Only ever move `plan_until` forwards, and that includes downgrades.**
