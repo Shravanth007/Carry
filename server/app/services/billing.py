@@ -283,7 +283,8 @@ def _transfer(conn, event: Event) -> None:
     # granted by hand isn't the subscription being transferred, so it stays -
     # but the destination is still given the subscription, because dropping it
     # would lose paid access that cannot be replayed.
-    if row[2] == "play":
+    paid = row[2] == "play"
+    if paid:
         conn.execute(
             "UPDATE users SET plan = %s, plan_until = NULL, plan_source = NULL"
             " WHERE uid = %s",
@@ -297,10 +298,26 @@ def _transfer(conn, event: Event) -> None:
             event.from_uid,
         )
 
-    # The event's own period if it carries one, otherwise what the source held.
-    # _grant applies the same rules as any other grant: nothing undated, and
-    # nothing for a period that has already ended.
-    _grant(conn, event.to_uid, event.period_end or row[1])
+    # Which period the destination gets.
+    #
+    # The longest one we know about, not simply the event's: an event carrying
+    # a period that has already ended would otherwise be chosen, `_grant` would
+    # refuse it, and - with the source already cleared - neither account would
+    # keep access that was still paid for.
+    #
+    # A hand-granted source contributes no period at all. Its end date belongs
+    # to the grant, which stays where it is; using it here would hand the
+    # destination a Play-marked plan lasting longer than the subscription that
+    # actually moved.
+    periods = [when for when in (event.period_end, row[1] if paid else None) if when]
+    if not periods:
+        log.warning(
+            "transfer %s has no period to give %s; reconciliation will settle it",
+            event.id,
+            event.to_uid,
+        )
+        return
+    _grant(conn, event.to_uid, max(periods))
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 
 

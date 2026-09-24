@@ -490,6 +490,65 @@ class TestTransfer:
 
         assert db.accounts["grace"]["plan_until"] == LATER
 
+    def test_an_event_period_that_has_ended_does_not_lose_the_plan(self, database):
+        """The source is cleared before the destination is granted. Choosing
+        the event's period blindly would mean a stale one is refused and
+        neither account keeps access that is still paid for."""
+        gone = datetime.now(UTC) - timedelta(days=10)
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t7",
+                    kind="TRANSFER",
+                    uid=None,
+                    ends=gone,
+                    transferred_from="ada",
+                    transferred_to="grace",
+                )
+            )
+        )
+
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+        assert db.accounts["grace"]["plan_until"] == LATER
+
+    def test_a_hand_granted_period_is_not_handed_to_the_destination(self, database):
+        """The grant's end date belongs to the grant, which stays put. Using it
+        would give the destination a Play-marked plan lasting longer than the
+        subscription that actually moved."""
+        db = database(
+            {
+                "ada": {
+                    "plan": plans.PLUS,
+                    "plan_until": LATER,
+                    "source": "granted",
+                },
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t8",
+                    kind="TRANSFER",
+                    uid=None,
+                    ends=None,
+                    transferred_from="ada",
+                    transferred_to="grace",
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.PLUS  # the grant stays
+        assert db.accounts["grace"]["plan"] == plans.FREE  # and nothing invented
+
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and
         both hand it out. The second finds nothing left to move."""
