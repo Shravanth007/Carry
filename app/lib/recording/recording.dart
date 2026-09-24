@@ -138,30 +138,29 @@ abstract final class Recording {
       );
     }
 
-    // The account changed while this was recording: signed out, or a
-    // different person signed in. Attaching it to whoever is here now would
-    // hand them someone else's words, so it goes no further.
-    if (owner == null || owner != Auth.currentUser?.uid) {
-      Recorder.deleteFile(finished.path);
-      // The safety net firing is worth knowing about: someone lost a
-      // recording, even though losing it was the right answer.
-      Analytics.event('recording_dropped_account_changed', {
-        'seconds': finished.duration.inSeconds,
-      });
-      return (
-        message:
-            "That recording wasn't saved: the account changed while it "
-            'was running.',
-        stillRecording: false,
-      );
-    }
-
-    Notes.addRecorded(
-      ownerUid: owner,
+    // The same gate an import goes through, so both are kept or refused for
+    // the same reasons - including the account having changed while this was
+    // running, which the gate checks for either kind of audio.
+    final kept = Notes.addAudio(
+      source: AudioSource.recorded,
+      ownerUid: owner ?? '',
       path: finished.path,
       duration: finished.duration,
       bytes: finished.bytes,
     );
+    final refused = kept.error;
+    if (refused != null) {
+      Recorder.deleteFile(finished.path);
+      // Worth knowing about: someone lost a recording, even when losing it was
+      // the right answer.
+      Analytics.event('recording_refused', {
+        'reason': kept.reason,
+        'seconds': finished.duration.inSeconds,
+        'size': Analytics.sizeBucket(finished.bytes),
+      });
+      return (message: refused, stillRecording: false);
+    }
+
     Analytics.event('recording_saved', {
       'seconds': finished.duration.inSeconds,
       'size': Analytics.sizeBucket(finished.bytes),

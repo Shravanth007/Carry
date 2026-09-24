@@ -85,14 +85,14 @@ start), and push notification capture (there is no push).
 | `recording_too_short` | `seconds`, `stopped_by` |
 | `recording_stop_failed` | `stopped_by` |
 | `recording_discarded` | `seconds`, `by`: `user` / `abandoned` |
-| `recording_dropped_account_changed` | `seconds` — the safety net fired and someone lost a recording |
+| `recording_refused` | `reason`, `seconds`, `size` — the gate turned it away and the file was deleted |
 
 **Importing** — `notes/audio_import.dart`
 
 | Event | Properties |
 |---|---|
 | `import_opened`, `import_cancelled` | |
-| `import_rejected` | `reason`: `wrong_type` / `empty` / `too_large` / `could_not_copy`, `extension`, `size` |
+| `import_rejected` | `reason`, `extension`, `size` |
 | `import_added` | `extension`, `size`, `notes_after` |
 
 **Settings** — `settings/`, `backup/`
@@ -112,6 +112,12 @@ start), and push notification capture (there is no push).
 `kind` is one of `signed_out`, `offline`, `timeout`, `unreachable`,
 `unauthorized`, `forbidden`, `missing`, `too_large`, `rate_limited`,
 `server_error`, `refused`, `bad_body`, `wrong_shape`.
+
+**Refusal reasons are shared.** `Notes.addAudio` is the one gate audio passes
+through, and it returns a code: `no_owner`, `empty`, `too_large`, `too_short`,
+`account_changed`. Both `recording_refused` and `import_rejected` carry it, so
+the two paths read the same way in a funnel. `import_rejected` also has reasons
+of its own from before the gate: `signed_out`, `wrong_type`, `could_not_copy`.
 
 **`request_id` is the useful one.** Every request carries an `X-Request-ID`
 header, the server logs it and sends it back, so an event in PostHog points at

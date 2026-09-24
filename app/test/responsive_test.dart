@@ -70,14 +70,12 @@ void main() {
   }
 
   testWidgets('a long note title does not break the list', (tester) async {
-    Notes.add(
-      Note(
-        id: '1',
-        ownerUid: 'firebase-uid',
-        title: 'Quarterly planning with the whole team about next year' * 3,
-        path: '/phone/long.m4a',
-        addedAt: DateTime.now(),
-      ),
+    Notes.addAudio(
+      source: AudioSource.imported,
+      ownerUid: 'firebase-uid',
+      path: '/phone/long.m4a',
+      bytes: 2048,
+      title: 'Quarterly planning with the whole team about next year' * 3,
     );
 
     await pumpScreen(

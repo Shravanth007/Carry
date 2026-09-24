@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../analytics/analytics.dart';
+import '../auth/auth.dart';
 import '../limits.dart';
 import 'notes.dart';
 
@@ -92,6 +93,14 @@ const _cancelled = (note: null, error: null);
 /// The file comes from outside the app, so its type and size are checked here
 /// rather than trusted: a file picker can hand back anything the user taps.
 Future<ImportResult> importAudio() async {
+  // Asked before the picker opens, so nobody chooses a file and is then told
+  // it can't be kept. Recording refuses the same way, before the microphone.
+  final ownerUid = Auth.currentUser?.uid ?? '';
+  if (ownerUid.isEmpty) {
+    Analytics.event('import_rejected', {'reason': 'signed_out'});
+    return (note: null, error: 'Sign in to import a recording.');
+  }
+
   Analytics.event('import_opened');
   final file = await openFile(
     acceptedTypeGroups: [
@@ -173,20 +182,31 @@ Future<ImportResult> importAudio() async {
     );
   }
 
-  final now = DateTime.now();
-  final note = Note(
-    id: '${now.microsecondsSinceEpoch}',
-    ownerUid: Notes.owner,
-    title: name.substring(0, name.length - extension.length - 1),
+  // The same gate a recording goes through, so both are kept or refused for
+  // the same reasons. An import brings no duration: nothing here reads an
+  // audio file's length, and the server works it out from the file.
+  final result = Notes.addAudio(
+    source: AudioSource.imported,
+    ownerUid: ownerUid,
     path: kept,
-    addedAt: now,
     bytes: bytes,
+    title: name.substring(0, name.length - extension.length - 1),
   );
-  Notes.add(note);
+  final refused = result.error;
+  if (refused != null) {
+    _deletePartial(kept); // nothing keeps a file no note points at
+    Analytics.event('import_rejected', {
+      'reason': result.reason,
+      'extension': _reportable(extension),
+      'size': Analytics.sizeBucket(bytes),
+    });
+    return (note: null, error: refused);
+  }
+
   Analytics.event('import_added', {
     'extension': _reportable(extension),
     'size': Analytics.sizeBucket(bytes),
     'notes_after': Analytics.countBucket(Notes.all.value.length),
   });
-  return (note: note, error: null);
+  return (note: result.note, error: null);
 }
