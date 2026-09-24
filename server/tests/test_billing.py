@@ -39,6 +39,12 @@ def event(
         "entitlement_ids": ["plus"] if entitlements is None else entitlements,
         "expiration_at_ms": int(ends.timestamp() * 1000) if ends else None,
     }
+    # The store names the two ends of a transfer as arrays, so the tests do
+    # too: a helper that sends a plain string would be testing a payload that
+    # never arrives.
+    for side in ("transferred_from", "transferred_to"):
+        if side in extra and not isinstance(extra[side], list):
+            extra[side] = [extra[side]]
     body.update(extra)
     return {"event": body}
 
@@ -91,6 +97,8 @@ class TestReadingTheEvent:
         "payload",
         [
             {},
+            [],  # valid JSON, but not an object
+            "an event, honest",
             {"event": None},
             {"event": {"type": "RENEWAL"}},  # no id
             {"event": {"id": "e"}},  # no type
@@ -121,6 +129,7 @@ class FakeDatabase:
     def __init__(self, accounts: dict[str, dict] | None = None):
         self.accounts = accounts or {}
         self.events: set[str] = set()
+        self.problems: dict[str, str] = {}
         self.statements: list[str] = []
 
     # -- what the code calls ------------------------------------------------
@@ -133,6 +142,9 @@ class FakeDatabase:
                 return _FakeCursor(None)  # the primary key refused it
             self.events.add(event_id)
             return _FakeCursor((event_id,))
+        if flat.startswith("UPDATE billing_events SET problem"):
+            self.problems[params[1]] = params[0]
+            return _FakeCursor(None)
         if flat.startswith("INSERT INTO users"):
             self._upsert(params)
             return _FakeCursor(None)
@@ -551,6 +563,112 @@ class TestTransfer:
 
         assert db.accounts["grace"]["plan"] == plans.FREE
 
+    def test_the_anonymous_id_the_store_made_is_not_an_account(self, database):
+        """Before somebody signs in the store calls them $RCAnonymousID:...,
+        and both ends of a transfer can carry those alongside ours. Ours is
+        the only one that names an account here."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t9",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from=["$RCAnonymousID:9f3c", "ada"],
+                    transferred_to=["$RCAnonymousID:1b7e", "grace"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.FREE
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+
+    def test_one_account_named_twice_is_still_one_account(self, database):
+        """Counting the names rather than the accounts would send a transfer
+        we could have applied off to be sorted out by hand."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t12",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from=["ada", "ada"],
+                    transferred_to=["grace", "grace"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.FREE
+        assert db.accounts["grace"]["plan"] == plans.PLUS
+        assert "t12" not in db.problems
+
+    def test_two_accounts_on_one_side_move_nothing(self, database):
+        """There is no way to tell which of them the subscription belongs to.
+        Guessing would either strand it or hand it to the wrong person, so
+        nothing moves and reconciliation settles it."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+                "hopper": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        billing.apply(
+            billing.read(
+                event(
+                    event_id="t10",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from="ada",
+                    transferred_to=["grace", "hopper"],
+                )
+            )
+        )
+
+        assert db.accounts["ada"]["plan"] == plans.PLUS
+        assert db.accounts["grace"]["plan"] == plans.FREE
+        assert db.accounts["hopper"]["plan"] == plans.FREE
+
+    def test_a_transfer_we_cannot_read_is_left_for_a_person(self, database):
+        """Acknowledging is right - the store would only redeliver the same
+        payload - but paid access may now be on the wrong account, so it goes
+        on the list somebody can actually query."""
+        db = database(
+            {
+                "ada": {"plan": plans.PLUS, "plan_until": LATER, "source": "play"},
+                "grace": {"plan": plans.FREE, "plan_until": None, "source": None},
+            }
+        )
+
+        assert billing.apply(
+            billing.read(
+                event(
+                    event_id="t11",
+                    kind="TRANSFER",
+                    uid=None,
+                    transferred_from="ada",
+                    transferred_to=["grace", "hopper"],
+                )
+            )
+        )
+
+        assert "one account on each side" in db.problems["t11"]
+        assert db.accounts["ada"]["plan"] == plans.PLUS  # nothing was lost
+
     def test_the_plan_cannot_be_moved_twice(self, database):
         """Two transfers from one account would otherwise both see Plus and
         both hand it out. The second finds nothing left to move."""
@@ -640,6 +758,33 @@ class TestTheEndpoint:
 
         res = client.post(
             "/billing/webhook", json={"hello": True}, headers={"Authorization": SECRET}
+        )
+
+        assert res.status_code == 400
+
+    def test_a_body_that_is_not_json_at_all_is_a_400(self, client, monkeypatch):
+        """A truncated delivery, or somebody poking at the endpoint. Without a
+        status we chose, `request.json()` raises and it is a 500 that reads
+        like Carry broke."""
+        monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", SECRET)
+
+        res = client.post(
+            "/billing/webhook",
+            content=b"not json at all",
+            headers={"Authorization": SECRET, "Content-Type": "application/json"},
+        )
+
+        assert res.status_code == 400
+
+    def test_a_body_that_is_json_but_not_an_object_is_a_400(
+        self, client, monkeypatch
+    ):
+        """`[].get("event")` is an AttributeError, and an unhandled one is a
+        500."""
+        monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", SECRET)
+
+        res = client.post(
+            "/billing/webhook", json=["nope"], headers={"Authorization": SECRET}
         )
 
         assert res.status_code == 400

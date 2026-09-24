@@ -134,8 +134,23 @@ PLANS = {
 | `EXPIRATION` | `plan = 'free'` **only if the period we hold has actually ended** — see below |
 | `BILLING_ISSUE` | Keep Plus, flag it: Play retries for days, and the app shows a banner |
 | `PRODUCT_CHANGE` | Re-read the entitlement, don't infer from the product |
-| `TRANSFER` | **Move** the plan from the old uid to the new one, keeping the source row's `plan_until` — a transfer payload is only `transferred_from` and `transferred_to`, with no period of its own. One Play account, two Google logins — easy to forget and wrong in a way people notice |
+| `TRANSFER` | **Move** the plan from the old uid to the new one, keeping the source row's `plan_until` — a transfer payload is only `transferred_from` and `transferred_to`, both **arrays** of app user IDs, with no period of its own. One Play account, two Google logins — easy to forget and wrong in a way people notice |
 | `REFUND` | `plan = 'free'` immediately |
+
+**An event we accept but cannot act on leaves a note.** `billing_events.problem`
+says why — today only a transfer that doesn't name one account on each side.
+Acknowledging is the right answer to the store (a redelivery is the same
+payload), but somebody's paid access may be on the wrong account, so:
+
+```sql
+SELECT event_id, kind, received_at, problem
+  FROM billing_events WHERE problem IS NOT NULL ORDER BY received_at;
+```
+
+Fixing one is a query and a `UPDATE users SET plan ...` by hand. That is the
+right amount of machinery for a list that should be empty: an admin screen
+nobody opens is a second way to change a plan, and a second way to get it
+wrong. Build one when real money is moving and the list stops being empty.
 
 **Only ever move `plan_until` forwards, and that includes downgrades.**
 Webhooks arrive out of order. An old `RENEWAL` landing after a newer one must

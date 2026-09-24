@@ -98,6 +98,10 @@ def read(payload: dict) -> Event:
     Anything missing is a refusal, not a guess: an event we can't read is an
     event we must not act on.
     """
+    if not isinstance(payload, dict):
+        # Valid JSON, but a list or a bare string. `.get` on one of those is an
+        # AttributeError, which is a 500 - and this is a refusal, not a bug.
+        raise ValueError("payload is not an object")
     event = payload.get("event")
     if not isinstance(event, dict):
         raise ValueError("no event in the payload")
@@ -116,8 +120,8 @@ def read(payload: dict) -> Event:
         uid=_text(event.get("app_user_id")),
         entitlements=tuple(str(e) for e in entitlements),
         period_end=_moment(event.get("expiration_at_ms")),
-        from_uid=_text(event.get("transferred_from")),
-        to_uid=_text(event.get("transferred_to")),
+        from_uid=_side(event.get("transferred_from")),
+        to_uid=_side(event.get("transferred_to")),
     )
 
 
@@ -272,7 +276,12 @@ def _transfer(conn, event: Event) -> None:
     grant, which stays put.
     """
     if not event.from_uid or not event.to_uid:
-        log.warning("transfer %s is missing an account", event.id)
+        # Either a side named nobody we know, or it named two accounts and
+        # there was no way to choose. Both mean paid access may now be sitting
+        # on the wrong account, and neither is something a redelivery of the
+        # same payload would fix, so it goes on the list for a person.
+        log.warning("transfer %s does not name one account on each side", event.id)
+        _flag(conn, event.id, "transfer did not name one account on each side")
         return
     row = conn.execute(
         "SELECT plan, plan_until, plan_source FROM users WHERE uid = %s FOR UPDATE",
@@ -314,8 +323,51 @@ def _transfer(conn, event: Event) -> None:
     log.info("moved %s from %s to %s", row[0], event.from_uid, event.to_uid)
 
 
+def _flag(conn, event_id: str, problem: str) -> None:
+    """Leaves a note on the ledger row for a human to find.
+
+    Same transaction as everything else, so the note and the event arrive
+    together. See the `problem` column in db.py for how to read the list.
+    """
+    conn.execute(
+        "UPDATE billing_events SET problem = %s WHERE event_id = %s",
+        (problem, event_id),
+    )
+
+
 def _text(value) -> str | None:
     return str(value) if value else None
+
+
+# What the store calls somebody before they sign in. Those IDs name nobody
+# here: our accounts are keyed by Firebase uid.
+ANONYMOUS = "$RCAnonymousID:"
+
+
+def _side(value) -> str | None:
+    """One end of a transfer.
+
+    RevenueCat sends each side as an *array* of app user IDs, not a string -
+    one customer can have several, the anonymous one the store issued before
+    they signed in and then ours. Only ours names an account, so the anonymous
+    ones are dropped, and the rest deduplicated: the same account named twice
+    is one account, and treating it as two would send a transfer we could have
+    applied off to be sorted out by hand.
+
+    If that still leaves more than one there is no way to choose between them,
+    and inventing an answer would either strand a subscription or hand it to
+    the wrong account, so we take none and leave a note for a person.
+    """
+    ids = value if isinstance(value, list) else [value]
+    # dict.fromkeys, not a set: which one is left matters when there is one,
+    # and a set's order is not the payload's.
+    ours = list(
+        dict.fromkeys(str(i) for i in ids if i and not str(i).startswith(ANONYMOUS))
+    )
+    if len(ours) > 1:
+        log.warning("a transfer names %d accounts on one side; leaving it", len(ours))
+        return None
+    return ours[0] if ours else None
 
 
 def _moment(millis) -> datetime | None:

@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../analytics/analytics.dart';
 import '../billing/billing.dart';
+import '../session.dart';
 
 import 'sign_in_screen.dart';
 
@@ -175,6 +176,10 @@ class _AuthGateState extends State<AuthGate> {
           // here last.
           Analytics.reset();
           unawaited(Billing.forget());
+          // And whatever was being held for them. Only a sign-out from
+          // Settings used to clear these, so a session Firebase ended left
+          // one person's notes on screen for the next one.
+          unawaited(forgetSession());
           Analytics.screen('sign_in');
         }
       }

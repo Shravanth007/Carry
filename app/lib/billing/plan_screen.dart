@@ -7,14 +7,6 @@ import '../theme.dart';
 import '../widgets/scrollable_column.dart';
 import 'billing.dart';
 
-/// How long to wait between asking the server again after a purchase.
-///
-/// A seam, like the recorder's clock: tests set it to zero rather than leaving
-/// real timers pending, which is how a widget test ends up reporting a leak
-/// that isn't one.
-@visibleForTesting
-Duration webhookWait = const Duration(seconds: 1);
-
 /// What Carry is offering, and what this account has.
 ///
 /// The plan shown here is the **server's** answer, never the store's. The
@@ -105,12 +97,10 @@ class _PlanScreenState extends State<PlanScreen> {
       if (!mounted) return;
       if (trouble == cancelled) return; // closing the sheet is a decision
       // Whatever the store said, the server decides - and it hears through a
-      // webhook, which takes a moment to arrive. Ask again a few times before
-      // telling somebody who has just paid that they are on free.
+      // webhook, which takes a moment to arrive. So: read once, and if the
+      // server hasn't caught up, say so and offer "Check again" rather than
+      // showing "Free" and a buy button to somebody who has just paid.
       await _load();
-      // The store has taken the money, but the server only hears through a
-      // webhook, which takes a moment. Say so, rather than showing "Free" and
-      // a buy button to somebody who has just paid.
       if (mounted && trouble == null && !_hasPlus) {
         setState(() => _justBought = true);
       }
