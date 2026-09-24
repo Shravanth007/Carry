@@ -85,3 +85,14 @@ _limiter = RateLimiter()
 def limiter() -> RateLimiter:
     """Dependency, so tests can use their own limits."""
     return _limiter
+
+
+# Counted separately from accounts, and reached first: this one applies to a
+# request whose token hasn't been checked yet, or that carries no token at all.
+_ip_limiter = RateLimiter(per_minute=config.RATE_LIMIT_PER_IP_PER_MINUTE)
+
+
+def ip_limiter() -> RateLimiter:
+    """The per-address limiter. Middleware can't use Depends, so this is how
+    tests reach in and swap the limits."""
+    return _ip_limiter
