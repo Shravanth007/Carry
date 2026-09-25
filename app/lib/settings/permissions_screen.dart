@@ -126,8 +126,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              'Carry records only while you hold the record button. '
-              'Your phone keeps permissions, so turning one off happens there.',
+              'Carry records when you tap Record, and stops when you save or '
+              'delete. Your phone keeps permissions, so turning one off '
+              'happens there.',
               style: text.bodySmall?.copyWith(color: CarryColors.muted),
             ),
           ),

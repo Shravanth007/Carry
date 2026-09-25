@@ -1,17 +1,15 @@
-# carry
+# Carry — the app
 
-A new Flutter project.
+The Flutter half of Carry. What the project is and what it does:
+[../README.md](../README.md). How to work on it, and the rules it follows:
+[CLAUDE.md](CLAUDE.md).
 
-## Getting Started
+```
+flutter run                      # r = hot reload, R = hot restart
+flutter test
+flutter analyze
+flutter widget-preview start     # every screen in Chrome, no Firebase needed
+```
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Each feature has a doc in [docs/](docs/): sign-in, onboarding, notes,
+analytics, payments and iOS.

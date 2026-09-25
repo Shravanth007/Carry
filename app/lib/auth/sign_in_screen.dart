@@ -129,7 +129,10 @@ class _GoogleButton extends StatelessWidget {
           foregroundColor: const Color(0xFF1F1F1F),
           side: const BorderSide(color: Color(0xFF747775)),
           shape: const StadiumBorder(),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          // From the theme's type, so the label is the same face as the
+          // rest of the screen wherever the default font isn't Roboto.
+          textStyle: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontSize: 16),
         ),
         child: busy
             ? const SizedBox.square(
