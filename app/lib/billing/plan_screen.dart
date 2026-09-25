@@ -6,6 +6,7 @@ import '../limits.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
 import '../widgets/scrollable_column.dart';
+import '../widgets/toast.dart';
 import 'billing.dart';
 
 /// What Carry is offering, and what this account has.
@@ -54,7 +55,7 @@ class _PlanScreenState extends State<PlanScreen> {
       _account = widget.previewUser;
       _problem = widget.previewProblem;
       _offers = const [
-        Offer(id: 'plus', title: 'Carry Plus', price: '₹199 / month'),
+        Offer(id: 'plus', title: 'Carry Plus', price: '\$2.99 / month'),
       ];
       _loading = false;
       return;
@@ -102,7 +103,13 @@ class _PlanScreenState extends State<PlanScreen> {
       // server hasn't caught up, say so and offer "Check again" rather than
       // showing "Free" and a buy button to somebody who has just paid.
       await _load();
-      if (mounted && trouble == null && !_hasPlus) {
+      if (!mounted) return;
+      if (trouble == null && _hasPlus) {
+        // The server has it. Say so out loud: the card behind the toast
+        // changes too, but a screen that quietly rearranges itself after a
+        // payment leaves people wondering whether it worked.
+        showToast(context, "You're on Carry Plus.");
+      } else if (trouble == null) {
         setState(() => _justBought = true);
       }
       if (mounted && trouble != null) setState(() => _problem = trouble);
@@ -133,12 +140,18 @@ class _PlanScreenState extends State<PlanScreen> {
       }
       await _load();
       if (!mounted) return;
+      if (_hasPlus) {
+        // "Restore a purchase" -> "Purchase restored": the same words going
+        // in and coming out.
+        showToast(context, 'Purchase restored.');
+        return;
+      }
       setState(() {
         // "Nothing to restore" is a claim about the account, so it can only
         // be made when the server actually answered. If the plan is unknown,
         // _load has already said so, and saying this instead would tell a
         // paying customer they never bought anything.
-        if (_account != null && !_hasPlus) {
+        if (_account != null) {
           _problem = 'No earlier purchase to restore.';
         }
       });
@@ -401,17 +414,25 @@ ServerUser _someone({String plan = 'free', int secondsLeft = 2400}) =>
       secondsLeft: secondsLeft,
     );
 
-@Preview(name: 'Plan · free', wrapper: previewApp)
+@Preview(name: 'Plan · free', size: Size(412, 915), wrapper: previewApp)
 Widget planFree() => PlanScreen(previewUser: _someone());
 
-@Preview(name: 'Plan · out of minutes', wrapper: previewApp)
+@Preview(
+  name: 'Plan · out of minutes',
+  size: Size(412, 915),
+  wrapper: previewApp,
+)
 Widget planEmpty() => PlanScreen(previewUser: _someone(secondsLeft: 0));
 
-@Preview(name: 'Plan · plus', wrapper: previewApp)
+@Preview(name: 'Plan · plus', size: Size(412, 915), wrapper: previewApp)
 Widget planPlus() =>
     PlanScreen(previewUser: _someone(plan: 'plus', secondsLeft: 71000));
 
-@Preview(name: 'Plan · server unreachable', wrapper: previewApp)
+@Preview(
+  name: 'Plan · server unreachable',
+  size: Size(412, 915),
+  wrapper: previewApp,
+)
 Widget planUnknown() => const PlanScreen(
   previewProblem: "Carry couldn't check your plan. Pull down to try again.",
 );

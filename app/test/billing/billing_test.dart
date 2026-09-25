@@ -44,7 +44,7 @@ void main() {
   });
 
   test('what is for sale comes from the store', () async {
-    expect((await Billing.offers()).single.price, '₹199 / month');
+    expect((await Billing.offers()).single.price, '\$2.99 / month');
   });
 
   test(

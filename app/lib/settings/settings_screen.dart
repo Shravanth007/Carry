@@ -9,6 +9,7 @@ import '../session.dart';
 import '../theme.dart';
 import 'permissions_screen.dart';
 import 'widgets.dart';
+import '../widgets/toast.dart';
 
 @Preview(name: 'Settings', size: Size(412, 915), wrapper: previewApp)
 Widget settingsPreview() =>
@@ -54,8 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// that does nothing, and the count says whether to build it.
   void _soon(String feature, String what) {
     Analytics.event('soon_tapped', {'feature': feature});
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$what is coming. Not yet.')));
+    showToast(context, '$what is coming. Not yet.');
   }
 
   Future<void> _signOut() async {
@@ -65,9 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       debugPrint('Sign-out failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't sign out. Try again.")),
-        );
+        showToast(context, "Couldn't sign out. Try again.");
       }
     }
     // On success this screen normally goes away with the signed-in app. If

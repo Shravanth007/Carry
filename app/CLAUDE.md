@@ -100,10 +100,17 @@ compiles against SDK 37, which the Android SDK currently publishes only as
 - Colors come from `CarryColors`. Screens have no hex values, except the
   Google sign-in button, which follows Google's branding rules.
 - Text styles come from `Theme.of(context).textTheme` with `copyWith`.
-- Every screen gets a `@Preview` that uses `wrapper: previewApp`.
+- Every screen gets a `@Preview` with `wrapper: previewApp` **and**
+  `size: Size(412, 915)`. Without the size the preview stretches to the
+  width of the browser, which is the one shape the app never runs at.
 - Layouts must hold up on a small phone with large text: `test/responsive_test.dart`
   pumps every screen at three phone sizes and two text sizes, and fails on
   anything that doesn't fit. Add new screens to it.
+- **Something said in passing goes through `showToast`**, never a `SnackBar`
+  built on the spot. A toast confirms what happened, in the same words as
+  the button that caused it. A problem that needs a decision stays on the
+  screen next to the thing it is about: a message that vanishes after four
+  seconds is no use to somebody who looked away.
 - Wrap text inside a `Row` in `Flexible`. For a full-height screen, use
   `ScrollableColumn` so it scrolls instead of overflowing.
 

@@ -62,7 +62,7 @@ void main() {
 
     expect(find.text('Free'), findsOneWidget);
     expect(find.textContaining('40 minutes'), findsOneWidget);
-    expect(find.text('Upgrade for ₹199 / month'), findsOneWidget);
+    expect(find.text('Upgrade for \$2.99 / month'), findsOneWidget);
   });
 
   testWidgets('the offer says what Plus gives, and what Free gives instead', (
@@ -83,13 +83,40 @@ void main() {
     expect(find.textContaining('Google Play'), findsOneWidget);
   });
 
+  testWidgets('a purchase the server confirms says so', (tester) async {
+    serverSays(secondsLeft: 2400);
+    await openPlan(tester);
+    // The webhook lands before the screen asks again.
+    serverSays(plan: 'plus', secondsLeft: 71000);
+
+    await tester.tap(find.text('Upgrade for \$2.99 / month'));
+    await tester.pumpAndSettle();
+
+    // The card changes behind it, but a payment that rearranges the screen
+    // in silence leaves people wondering whether it worked.
+    expect(find.text("You're on Carry Plus."), findsOneWidget);
+  });
+
+  testWidgets('restoring says the same word the button did', (tester) async {
+    serverSays(secondsLeft: 2400);
+    await openPlan(tester);
+    serverSays(plan: 'plus', secondsLeft: 71000);
+
+    await tester.tap(find.text('Restore a purchase'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Purchase restored.'), findsOneWidget);
+    // And never both: the toast is the answer, not an extra one.
+    expect(find.text('No earlier purchase to restore.'), findsNothing);
+  });
+
   testWidgets('a paid account is not sold anything again', (tester) async {
     serverSays(plan: 'plus', secondsLeft: 71000);
 
     await openPlan(tester);
 
     expect(find.text('Carry Plus'), findsOneWidget);
-    expect(find.text('Upgrade for ₹199 / month'), findsNothing);
+    expect(find.text('Upgrade for \$2.99 / month'), findsNothing);
     expect(find.text('Restore a purchase'), findsNothing);
   });
 
@@ -114,7 +141,7 @@ void main() {
       // is what the screen must show.
       store.whenBought = null;
 
-      await tester.tap(find.text('Upgrade for ₹199 / month'));
+      await tester.tap(find.text('Upgrade for \$2.99 / month'));
       await tester.pump();
       await tester.pump();
 
@@ -130,7 +157,7 @@ void main() {
     await openPlan(tester);
     store.whenBought = 'cancelled';
 
-    await tester.tap(find.text('Upgrade for ₹199 / month'));
+    await tester.tap(find.text('Upgrade for \$2.99 / month'));
     await tester.pump();
     await settle(tester);
 
@@ -182,7 +209,7 @@ void main() {
 
     expect(call, 2, reason: 'the refresh must actually have run');
     expect(find.text('Carry Plus'), findsOneWidget);
-    expect(find.text('Upgrade for ₹199 / month'), findsNothing);
+    expect(find.text('Upgrade for \$2.99 / month'), findsNothing);
   });
 
   testWidgets('an older paid answer cannot override a newer free one', (
@@ -213,7 +240,7 @@ void main() {
 
     expect(call, 2, reason: 'the refresh must actually have run');
     expect(find.text('Free'), findsOneWidget);
-    expect(find.text('Upgrade for ₹199 / month'), findsOneWidget);
+    expect(find.text('Upgrade for \$2.99 / month'), findsOneWidget);
   });
 
   testWidgets('it says what a plan does not do', (tester) async {

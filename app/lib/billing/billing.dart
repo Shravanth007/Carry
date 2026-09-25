@@ -312,7 +312,11 @@ class DemoStore implements PurchaseStore {
 
   @override
   Future<List<Offer>> offers() async => const [
-    Offer(id: 'carry_plus_monthly', title: 'Carry Plus', price: '₹199 / month'),
+    Offer(
+      id: 'carry_plus_monthly',
+      title: 'Carry Plus',
+      price: '\$2.99 / month',
+    ),
   ];
 
   @override

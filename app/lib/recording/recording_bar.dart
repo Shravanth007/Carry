@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'recording.dart';
+import '../widgets/toast.dart';
 
 /// The black bar that sits at the bottom of the notes list while recording.
 ///
@@ -148,9 +149,7 @@ class _RecordingBarState extends State<RecordingBar> {
     });
   }
 
-  void _say(String message) =>
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+  void _say(String message) => showToast(context, message);
 
   /// mm:ss, and h:mm:ss once it runs past an hour.
   static String clock(Duration d) {

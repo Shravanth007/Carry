@@ -4,7 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// A store a test drives: what it sells, and what buying does.
 class TestStore implements PurchaseStore {
   List<Offer> selling = const [
-    Offer(id: 'carry_plus_monthly', title: 'Carry Plus', price: '₹199 / month'),
+    Offer(
+      id: 'carry_plus_monthly',
+      title: 'Carry Plus',
+      price: '\$2.99 / month',
+    ),
   ];
 
   /// What `buy` answers. Null means it completed.
