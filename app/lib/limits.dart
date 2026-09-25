@@ -35,8 +35,6 @@ abstract final class Limits {
 ///
 /// Prices are **not** here: they come from the store, per country, and a
 /// number typed into the app would be wrong for most of the world.
-typedef Allowance = ({String transcription, String audio});
-
 abstract final class Plans {
   static const free = (
     transcription: '1 hour of transcription a month',

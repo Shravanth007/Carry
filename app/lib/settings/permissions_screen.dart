@@ -3,8 +3,8 @@ import 'package:flutter/widget_previews.dart';
 
 import '../permissions/permissions.dart';
 import '../theme.dart';
-import 'widgets.dart';
 import '../widgets/toast.dart';
+import 'widgets.dart';
 
 @Preview(name: 'Permissions', size: Size(412, 915), wrapper: previewApp)
 Widget permissionsSettingsPreview() => const PermissionsScreen();

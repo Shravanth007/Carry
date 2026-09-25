@@ -3,13 +3,13 @@ import 'package:flutter/widget_previews.dart';
 
 import '../analytics/analytics.dart';
 import '../backup/backup.dart';
-import '../billing/plan_screen.dart';
 import '../backup/backup_screen.dart';
+import '../billing/plan_screen.dart';
 import '../session.dart';
 import '../theme.dart';
+import '../widgets/toast.dart';
 import 'permissions_screen.dart';
 import 'widgets.dart';
-import '../widgets/toast.dart';
 
 @Preview(name: 'Settings', size: Size(412, 915), wrapper: previewApp)
 Widget settingsPreview() =>

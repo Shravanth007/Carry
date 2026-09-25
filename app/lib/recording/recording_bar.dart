@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'recording.dart';
 import '../widgets/toast.dart';
+import 'recording.dart';
 
 /// The black bar that sits at the bottom of the notes list while recording.
 ///

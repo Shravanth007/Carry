@@ -4,8 +4,8 @@ import 'package:flutter/widget_previews.dart';
 import '../analytics/analytics.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
-import 'backup.dart';
 import '../widgets/toast.dart';
+import 'backup.dart';
 
 @Preview(name: 'Backup', size: Size(412, 915), wrapper: previewApp)
 Widget backupPreview() => const BackupScreen();
