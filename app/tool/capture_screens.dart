@@ -1,6 +1,10 @@
-// Writes a PNG of each screen to build/screens/, for the README's demo.
+// Writes the README's picture of the app: a PNG per screen in build/screens/,
+// and the frame sequence the GIF is made from in build/frames/.
 //
 //   flutter test tool/capture_screens.dart
+//   ffmpeg -y -framerate 2 -i build/frames/%02d.png \
+//     -vf "scale=300:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse" \
+//     -loop 0 ../docs/carry.gif
 //
 // These are the real screens, built by the real widgets — the same builders
 // the widget previews use, so a screen that changes shape here has changed
@@ -32,12 +36,27 @@ import 'package:flutter_test/flutter_test.dart';
 const _phone = Size(412, 915);
 
 final _out = Directory('build/screens');
+final _frames = Directory('build/frames');
+
+/// The screens in order, and how long each one holds: one entry per frame at
+/// ffmpeg's 2 fps. The two recording frames alternate so the timer ticks
+/// rather than sitting still.
+const _sequence = [
+  ...['1-sign-in', '1-sign-in', '1-sign-in', '1-sign-in'],
+  ...['2-welcome', '2-welcome', '2-welcome', '2-welcome'],
+  ...['3-recording', '4-recording', '3-recording', '4-recording'],
+  ...['5-notes', '5-notes', '5-notes', '5-notes'],
+  ...['6-plan', '6-plan', '6-plan', '6-plan', '6-plan'],
+  ...['7-settings', '7-settings', '7-settings', '7-settings'],
+];
 
 void main() {
   setUpAll(() async {
-    _out.createSync(recursive: true);
-    for (final file in _out.listSync()) {
-      file.deleteSync();
+    for (final dir in [_out, _frames]) {
+      dir.createSync(recursive: true);
+      for (final file in dir.listSync()) {
+        file.deleteSync();
+      }
     }
     await _loadFonts();
   });
@@ -51,7 +70,7 @@ void main() {
     );
 
     // The bar sits over the list it was started from, which is what somebody
-    // actually sees. Two frames a second apart, so the demo has a moment of
+    // actually sees. Two frames a second apart, so there is a moment of
     // motion in it rather than five stills.
     for (final (frame, elapsed) in const [(3, 46), (4, 47)]) {
       Notes.all.value = _someNotes().skip(1).toList();
@@ -99,7 +118,23 @@ void main() {
     );
 
     Notes.all.value = const [];
+    _writeSequence();
   });
+}
+
+/// Copies the screens into build/frames/ as 01.png, 02.png ... so one ffmpeg
+/// command makes the GIF. Repeats are how long a screen stays up: ffmpeg
+/// holds one frame rate for the whole run, so dwell time is a copy count.
+void _writeSequence() {
+  var frame = 1;
+  for (final name in _sequence) {
+    final png = File('${_out.path}/$name.png');
+    if (!png.existsSync()) {
+      throw StateError('$name is in the sequence but was never captured.');
+    }
+    png.copySync('${_frames.path}/${frame.toString().padLeft(2, '0')}.png');
+    frame++;
+  }
 }
 
 /// Renders one screen at phone size and writes it as a PNG.

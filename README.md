@@ -9,7 +9,7 @@ turning the recording into text is the piece being built now, and
 [Where it is](#where-it-is) says what works today.
 
 <p align="center">
-  <img src="docs/demo.gif" alt="Carry: signing in, recording a note, the notes list, the plan screen and settings" width="300">
+  <img src="docs/carry.gif" alt="Carry: signing in, recording a note, the notes list, the plan and settings" width="300">
 </p>
 
 ## What it does
@@ -96,14 +96,3 @@ fastapi dev app/main.py
 
 `server/.env.example` lists every setting, which ones are required, and what
 happens if one is missing.
-
-## The screenshots
-
-The demo above is generated from the app's own screens:
-
-```
-cd app
-flutter test tool/capture_screens.dart
-```
-
-That writes a PNG per screen to `app/build/screens/`.
