@@ -224,10 +224,11 @@ class _RecordingBarState extends State<RecordingBar> {
                     horizontal: 20,
                     vertical: 14,
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  // From the theme's type: a button's own style replaces the
+                  // ambient one rather than merging with it, so a family left
+                  // unnamed here is a different face from the rest of the bar.
+                  textStyle: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
                 child: const Text('Save'),
               ),

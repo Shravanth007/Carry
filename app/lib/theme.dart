@@ -48,11 +48,19 @@ final carryTheme = ThemeData(
 );
 
 /// The app's main button: dark pill, roomy label. Matches the record button.
+///
+/// The label starts from the theme's own type rather than a bare `TextStyle`:
+/// a style that names no family leaves the engine to pick one, which is a
+/// different font from the rest of the screen anywhere the default isn't
+/// Roboto.
 final carryButton = FilledButton.styleFrom(
   backgroundColor: CarryColors.ink,
   foregroundColor: CarryColors.ground,
   shape: const StadiumBorder(),
-  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17),
+  textStyle: carryTheme.textTheme.titleMedium?.copyWith(
+    fontWeight: FontWeight.w600,
+    fontSize: 17,
+  ),
 );
 
 /// Wraps a screen in the app theme for `flutter widget-preview start`.
