@@ -25,6 +25,26 @@ final carryTheme = ThemeData(
     foregroundColor: CarryColors.ink,
     scrolledUnderElevation: 0,
   ),
+  // Toasts, in the app's own colours rather than Material's grey. Ink on
+  // cream everywhere else, so a toast is cream on ink: the one surface that
+  // is deliberately not part of the page, which is what makes it read as
+  // temporary. Floating and inset, so it lines up with the 16pt gutter the
+  // screens use instead of sitting on the bottom edge of the glass.
+  snackBarTheme: SnackBarThemeData(
+    behavior: SnackBarBehavior.floating,
+    backgroundColor: CarryColors.ink,
+    contentTextStyle: const TextStyle(
+      color: CarryColors.ground,
+      fontSize: 15,
+      height: 1.3,
+    ),
+    // Only readable choice on ink, and it keeps an action from looking like
+    // a second sentence.
+    actionTextColor: CarryColors.ground,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    elevation: 2,
+  ),
 );
 
 /// The app's main button: dark pill, roomy label. Matches the record button.

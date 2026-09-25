@@ -4,6 +4,7 @@ import 'package:flutter/widget_previews.dart';
 import '../analytics/analytics.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
+import '../widgets/toast.dart';
 import 'backup.dart';
 
 @Preview(name: 'Backup', size: Size(412, 915), wrapper: previewApp)
@@ -45,12 +46,9 @@ class _BackupScreenState extends State<BackupScreen> {
   /// Not built yet. A tap that says so, and counts as asking for it.
   void _soonDrive() {
     Analytics.event('soon_tapped', {'feature': 'google_drive'});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Keeping recordings in your own Drive is coming. Not yet.',
-        ),
-      ),
+    showToast(
+      context,
+      'Keeping recordings in your own Drive is coming. Not yet.',
     );
   }
 

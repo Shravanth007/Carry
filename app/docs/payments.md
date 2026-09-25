@@ -127,6 +127,11 @@ PLANS = {
 `POST /billing/webhook`, secured by the shared secret RevenueCat sends in an
 `Authorization` header. What each event does:
 
+**The paywall's words live in `lib/limits.dart`** (`Plans.free`, `Plans.plus`),
+not in the screen, so the numbers there and the ones in
+`server/app/services/plans.py` can be compared side by side. Prices are never
+in the app: they come from the store, per country.
+
 | Event | What we do |
 |---|---|
 | `INITIAL_PURCHASE`, `RENEWAL`, `UNCANCELLATION` | `plan = 'plus'`, `plan_until` = the period end |

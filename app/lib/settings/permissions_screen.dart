@@ -3,6 +3,7 @@ import 'package:flutter/widget_previews.dart';
 
 import '../permissions/permissions.dart';
 import '../theme.dart';
+import '../widgets/toast.dart';
 import 'widgets.dart';
 
 @Preview(name: 'Permissions', size: Size(412, 915), wrapper: previewApp)
@@ -88,12 +89,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
 
     final opened = await Permissions.openSettings(where: 'settings');
     if (opened || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Couldn't open settings. Go to Settings → Apps → Carry → Permissions.",
-        ),
-      ),
+    showToast(
+      context,
+      "Couldn't open settings. Go to Settings → Apps → Carry → Permissions.",
     );
   }
 

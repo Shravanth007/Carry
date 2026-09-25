@@ -25,3 +25,24 @@ abstract final class Limits {
   /// For error messages: "25 MB".
   static String get uploadSize => '${uploadBytes ~/ (1024 * 1024)} MB';
 }
+
+/// What a plan allows, in the words the paywall uses.
+///
+/// Mirrors `server/app/services/plans.py`, which is the one that decides.
+/// Here rather than inside the screen so the paywall, an "out of minutes"
+/// message and anything else quote the same numbers, and so a price change on
+/// the server is one edit here instead of a search through widgets.
+///
+/// Prices are **not** here: they come from the store, per country, and a
+/// number typed into the app would be wrong for most of the world.
+abstract final class Plans {
+  static const free = (
+    transcription: '1 hour of transcription a month',
+    audio: 'Audio kept for 30 days',
+  );
+
+  static const plus = (
+    transcription: '20 hours of transcription a month',
+    audio: 'Audio kept for as long as you keep the plan',
+  );
+}

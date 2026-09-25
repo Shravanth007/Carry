@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
 import '../api/api.dart';
+import '../limits.dart';
 import '../settings/widgets.dart';
 import '../theme.dart';
 import '../widgets/scrollable_column.dart';
+import '../widgets/toast.dart';
 import 'billing.dart';
 
 /// What Carry is offering, and what this account has.
@@ -53,7 +55,7 @@ class _PlanScreenState extends State<PlanScreen> {
       _account = widget.previewUser;
       _problem = widget.previewProblem;
       _offers = const [
-        Offer(id: 'plus', title: 'Carry Plus', price: '₹199 / month'),
+        Offer(id: 'plus', title: 'Carry Plus', price: '\$2.99 / month'),
       ];
       _loading = false;
       return;
@@ -101,7 +103,13 @@ class _PlanScreenState extends State<PlanScreen> {
       // server hasn't caught up, say so and offer "Check again" rather than
       // showing "Free" and a buy button to somebody who has just paid.
       await _load();
-      if (mounted && trouble == null && !_hasPlus) {
+      if (!mounted) return;
+      if (trouble == null && _hasPlus) {
+        // The server has it. Say so out loud: the card behind the toast
+        // changes too, but a screen that quietly rearranges itself after a
+        // payment leaves people wondering whether it worked.
+        showToast(context, "You're on Carry Plus.");
+      } else if (trouble == null) {
         setState(() => _justBought = true);
       }
       if (mounted && trouble != null) setState(() => _problem = trouble);
@@ -132,12 +140,18 @@ class _PlanScreenState extends State<PlanScreen> {
       }
       await _load();
       if (!mounted) return;
+      if (_hasPlus) {
+        // "Restore a purchase" -> "Purchase restored": the same words going
+        // in and coming out.
+        showToast(context, 'Purchase restored.');
+        return;
+      }
       setState(() {
         // "Nothing to restore" is a claim about the account, so it can only
         // be made when the server actually answered. If the plan is unknown,
         // _load has already said so, and saying this instead would tell a
         // paying customer they never bought anything.
-        if (_account != null && !_hasPlus) {
+        if (_account != null) {
           _problem = 'No earlier purchase to restore.';
         }
       });
@@ -305,13 +319,21 @@ class _PlusCard extends StatelessWidget {
               offer.title,
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
-              '20 hours of transcription a month, and your audio kept for as '
-              'long as you keep the plan.',
-              style: text.bodyMedium?.copyWith(color: CarryColors.muted),
+              'What you get',
+              style: text.bodySmall?.copyWith(color: CarryColors.muted),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // Not const: a record's field can't be read in a const
+            // expression, and the numbers belong in limits.dart.
+            _Benefit(
+              gives: Plans.plus.transcription,
+              insteadOf: Plans.free.transcription,
+            ),
+            const SizedBox(height: 10),
+            _Benefit(gives: Plans.plus.audio, insteadOf: Plans.free.audio),
+            const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -323,12 +345,62 @@ class _PlusCard extends StatelessWidget {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    : Text(offer.price),
+                    // The price the store quoted, in the money the person
+                    // actually pays. Never a number typed in here.
+                    : Text('Upgrade for ${offer.price}'),
               ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Google Play takes the payment and manages it. Cancel any time '
+              'in Play, and Plus runs to the end of the period you paid for.',
+              style: text.bodySmall?.copyWith(color: CarryColors.muted),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One thing Plus gives, and what Free gives instead.
+///
+/// Both lines, not just the good one: "20 hours a month" means nothing to
+/// somebody who doesn't know what they have now, and a paywall that hides the
+/// comparison is the kind that gets refunded.
+class _Benefit extends StatelessWidget {
+  const _Benefit({required this.gives, required this.insteadOf});
+
+  final String gives;
+  final String insteadOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          // Sits on the first line of text however large the type is.
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(Icons.check_rounded, size: 18, color: CarryColors.accent),
+        ),
+        const SizedBox(width: 10),
+        // Flexible, because at the largest text size these wrap to three
+        // lines on a small phone.
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(gives, style: text.bodyMedium),
+              Text(
+                'Free: $insteadOf',
+                style: text.bodySmall?.copyWith(color: CarryColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -342,17 +414,25 @@ ServerUser _someone({String plan = 'free', int secondsLeft = 2400}) =>
       secondsLeft: secondsLeft,
     );
 
-@Preview(name: 'Plan · free', wrapper: previewApp)
+@Preview(name: 'Plan · free', size: Size(412, 915), wrapper: previewApp)
 Widget planFree() => PlanScreen(previewUser: _someone());
 
-@Preview(name: 'Plan · out of minutes', wrapper: previewApp)
+@Preview(
+  name: 'Plan · out of minutes',
+  size: Size(412, 915),
+  wrapper: previewApp,
+)
 Widget planEmpty() => PlanScreen(previewUser: _someone(secondsLeft: 0));
 
-@Preview(name: 'Plan · plus', wrapper: previewApp)
+@Preview(name: 'Plan · plus', size: Size(412, 915), wrapper: previewApp)
 Widget planPlus() =>
     PlanScreen(previewUser: _someone(plan: 'plus', secondsLeft: 71000));
 
-@Preview(name: 'Plan · server unreachable', wrapper: previewApp)
+@Preview(
+  name: 'Plan · server unreachable',
+  size: Size(412, 915),
+  wrapper: previewApp,
+)
 Widget planUnknown() => const PlanScreen(
   previewProblem: "Carry couldn't check your plan. Pull down to try again.",
 );

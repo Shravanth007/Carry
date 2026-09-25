@@ -8,6 +8,7 @@ import '../recording/recording.dart';
 import '../recording/recording_bar.dart';
 import '../settings/settings_screen.dart';
 import '../theme.dart';
+import '../widgets/toast.dart';
 
 @Preview(name: 'Home', size: Size(412, 915), wrapper: previewApp)
 Widget homePreview() =>
@@ -93,9 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _say(String message) =>
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+  void _say(String message) => showToast(context, message);
 
   @override
   Widget build(BuildContext context) {
